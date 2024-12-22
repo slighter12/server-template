@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
+
 	"server-template/internal/libs/mysql"
 	"server-template/internal/libs/redis"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"

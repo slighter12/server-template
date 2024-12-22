@@ -2,9 +2,11 @@ package pyroscope
 
 import (
 	"context"
+
 	"server-template/config"
 
 	"github.com/grafana/pyroscope-go"
+	"github.com/pkg/errors"
 	"go.uber.org/fx"
 )
 
@@ -35,7 +37,7 @@ func NewPyroscope(
 		},
 	})
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	lc.Append(fx.Hook{

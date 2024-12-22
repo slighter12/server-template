@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+
 	"server-template/config"
 	"server-template/internal/libs/logs"
 	"server-template/internal/libs/mysql"

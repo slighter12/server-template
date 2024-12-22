@@ -9,23 +9,21 @@ linters:
   enable:
     - bodyclose
     - contextcheck
+    - copyloopvar
     - cyclop
-    - deadcode
     - dupword
     - durationcheck
     - errcheck
     - errorlint
-    - execinquery
-    - exportloopref
+    - gci
     - gofmt
     - goimports
     - gochecknoinits
     - gochecknoglobals
-    - goconstrainnt
+    - goconst
     - gocritic
     - gocyclo
     - godox
-    - gofumpt
     - gosec  # Security-related checks are important
     - govet
     - ineffassign
@@ -66,9 +64,10 @@ issues:
 linters-settings:
   gci:
     sections:
-      - standard
-      - project
-      - default
+      - standard # Standard section: captures all standard packages.
+      - localmodule # Local module section: contains all local packages. This section is not present unless explicitly enabled.
+      - default # Default section: contains all imports that could not be matched to another section type.
+    custom-order: true
   gocognit:
     min-complexity: 20  # Reduce complexity threshold for better maintainability
   gocritic:
@@ -100,3 +99,6 @@ linters-settings:
     min-complexity: 5  # Make the rule stricter to catch nested if statements earlier
   revive:
     severity: warning  # Revive rules as warnings to encourage addressing them without failing the build
+  varnamelen:
+    ignore-decls:
+    - lc fx.Lifecycle

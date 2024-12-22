@@ -43,7 +43,7 @@ func New(lc fx.Lifecycle, conn *DBConn, database string) (*gorm.DB, error) {
 	)
 
 	// https://gorm.io/docs/connecting_to_the_database.html
-	db, err := gorm.Open(mysql.New(mysql.Config{
+	dbBase, err := gorm.Open(mysql.New(mysql.Config{
 		DSN:                       dsn,
 		DefaultStringSize:         256,   // default size for string fields
 		DisableDatetimePrecision:  true,  // disable datetime precision, which not supported before MySQL 5.6
@@ -55,7 +55,7 @@ func New(lc fx.Lifecycle, conn *DBConn, database string) (*gorm.DB, error) {
 		return nil, errors.Wrap(err, "gorm open failed")
 	}
 
-	sqlDB, err := db.DB()
+	sqlDB, err := dbBase.DB()
 	if err != nil {
 		return nil, errors.Wrap(err, "get connect pool failed")
 	}
@@ -88,5 +88,5 @@ func New(lc fx.Lifecycle, conn *DBConn, database string) (*gorm.DB, error) {
 		},
 	})
 
-	return db, nil
+	return dbBase, nil
 }

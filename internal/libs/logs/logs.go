@@ -3,6 +3,7 @@ package logs
 import (
 	"log/slog"
 	"os"
+
 	"server-template/config"
 
 	"github.com/pkg/errors"
