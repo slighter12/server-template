@@ -13,20 +13,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
       - name: Set environment variables
         run: |
-          IMAGE_NAME=my-app
-          REGISTRY=my-registry
-          TAG=$(git describe --tags --abbrev=0)
+          echo "IMAGE_NAME=my-app" >> $GITHUB_OUTPUT
+          echo "REGISTRY=my-registry" >> $GITHUB_OUTPUT
+          echo "TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
+        id: set-output
 
       - name: Set up Go 1.x
         uses: actions/setup-go@v5
         with:
           go-version: "^1.23"
         id: go
-
-      - name: Checkout the repository
-        uses: actions/checkout@v4
 
       - name: Get dependencies
         run: |

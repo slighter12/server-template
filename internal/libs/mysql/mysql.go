@@ -1,10 +1,12 @@
 package mysql
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/fx"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -28,7 +30,7 @@ type DBConn struct {
 	ConnMaxLifetime time.Duration `json:"connMaxLifetime" yaml:"connMaxLifetime"`
 }
 
-func New(conn *DBConn, database string) (*gorm.DB, error) {
+func New(lc fx.Lifecycle, conn *DBConn, database string) (*gorm.DB, error) {
 	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=True&loc=%s&timeout=%s",
 		conn.UserName,
@@ -76,6 +78,15 @@ func New(conn *DBConn, database string) (*gorm.DB, error) {
 	sqlDB.SetMaxIdleConns(maxIdleConns)
 	sqlDB.SetMaxOpenConns(maxOpenConns)
 	sqlDB.SetConnMaxLifetime(maxLifeTime)
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return sqlDB.PingContext(ctx)
+		},
+		OnStop: func(ctx context.Context) error {
+			return sqlDB.Close()
+		},
+	})
 
 	return db, nil
 }

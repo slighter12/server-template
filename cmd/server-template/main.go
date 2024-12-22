@@ -5,7 +5,9 @@ import (
 	"log/slog"
 	"server-template/config"
 	"server-template/internal/libs/logs"
+	"server-template/internal/libs/mysql"
 	"server-template/internal/libs/pyroscope"
+	"server-template/internal/libs/redis"
 
 	"go.uber.org/fx"
 )
@@ -13,7 +15,7 @@ import (
 func main() {
 	fx.New(
 		injectInfra(),
-		fx.Provide(),
+		injectConn(),
 		fx.Invoke(
 			pyroscope.NewPyroscope,
 			startServer,
@@ -27,6 +29,13 @@ func injectInfra() fx.Option {
 		logs.New,
 		context.Background,
 		pyroscope.NewSlogAdapter,
+	)
+}
+
+func injectConn() fx.Option {
+	return fx.Provide(
+		mysql.New,
+		redis.NewClusterClient,
 	)
 }
 

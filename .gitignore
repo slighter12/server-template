@@ -3,3 +3,6 @@
 
 # config
 config.yaml
+
+# golang workspace
+go.work*

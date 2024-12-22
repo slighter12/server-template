@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"server-template/internal/libs/mysql"
+	"server-template/internal/libs/redis"
 	"time"
 
 	"github.com/pkg/errors"
@@ -43,6 +45,9 @@ type Config struct {
 			Exporter string `json:"exporter" yaml:"exporter"`
 		} `json:"otel" yaml:"otel"`
 	} `json:"observability" yaml:"observability"`
+
+	Mysql *mysql.DBConn `json:"mysql" yaml:"mysql"`
+	Redis *redis.Conn   `json:"redis" yaml:"redis"`
 }
 
 type Log struct {
