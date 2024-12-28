@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"server-template/internal/domain/lifecycle"
+
 	"github.com/pkg/errors"
 	"go.uber.org/fx"
 	"gorm.io/driver/mysql"
@@ -30,7 +32,11 @@ type DBConn struct {
 	ConnMaxLifetime time.Duration `json:"connMaxLifetime" yaml:"connMaxLifetime"`
 }
 
-func New(lc fx.Lifecycle, conn *DBConn, database string) (*gorm.DB, error) {
+func New(
+	lc fx.Lifecycle,
+	conn *DBConn,
+	database string,
+) (*gorm.DB, error) {
 	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=True&loc=%s&timeout=%s",
 		conn.UserName,
@@ -80,10 +86,13 @@ func New(lc fx.Lifecycle, conn *DBConn, database string) (*gorm.DB, error) {
 	sqlDB.SetConnMaxLifetime(maxLifeTime)
 
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStart: func(startCtx context.Context) error {
+			ctx, cancel := context.WithTimeout(startCtx, lifecycle.DefaultTimeout)
+			defer cancel()
+
 			return sqlDB.PingContext(ctx)
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			return sqlDB.Close()
 		},
 	})

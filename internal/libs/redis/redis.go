@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"server-template/internal/domain/lifecycle"
+
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 )
@@ -36,10 +38,13 @@ func NewClusterClient(lc fx.Lifecycle, conn *Conn) (*redis.ClusterClient, error)
 	})
 
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStart: func(startCtx context.Context) error {
+			ctx, cancel := context.WithTimeout(startCtx, lifecycle.DefaultTimeout)
+			defer cancel()
+
 			return rdb.Ping(ctx).Err()
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			return rdb.Close()
 		},
 	})

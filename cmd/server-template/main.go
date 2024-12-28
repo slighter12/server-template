@@ -17,6 +17,8 @@ func main() {
 	fx.New(
 		injectInfra(),
 		injectConn(),
+		injectRepo(),
+		injectUse(),
 		fx.Invoke(
 			pyroscope.NewPyroscope,
 			startServer,
@@ -38,6 +40,14 @@ func injectConn() fx.Option {
 		mysql.New,
 		redis.NewClusterClient,
 	)
+}
+
+func injectRepo() fx.Option {
+	return fx.Provide()
+}
+
+func injectUse() fx.Option {
+	return fx.Options()
 }
 
 func startServer(ctx context.Context) error {

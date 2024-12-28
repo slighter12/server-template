@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"server-template/internal/libs/mysql"
@@ -43,7 +44,7 @@ type Config struct {
 			Host     string `json:"host" yaml:"host"`
 			Port     int    `json:"port" yaml:"port"`
 			IsSecure bool   `json:"isSecure" yaml:"isSecure"`
-			Exporter string `json:"exporter" yaml:"exporter"`
+			Exporter string `json:"exporter" yaml:"exporter"` // 可選: "jaeger", "otlp-grpc", "otlp-http"
 		} `json:"otel" yaml:"otel"`
 	} `json:"observability" yaml:"observability"`
 
@@ -57,8 +58,6 @@ type Log struct {
 	Path         string        `json:"path" yaml:"path"`
 	MaxAge       time.Duration `json:"maxAge" yaml:"maxAge"`
 	RotationTime time.Duration `json:"rotationTime" yaml:"rotationTime"`
-	// SensitiveWord map[string]string `json:"sensitiveWord" yaml:"sensitiveWord"`
-	// Fields        map[string]string `json:"fields" yaml:"fields"`
 }
 
 // LoadWithEnv is a loads .yaml files through viper.
@@ -78,6 +77,8 @@ func LoadWithEnv[T any](currEnv string, configPath ...string) (*T, error) {
 			configCtl.AddConfigPath(abs)
 		}
 	}
+	configCtl.AutomaticEnv()
+	configCtl.SetEnvKeyReplacer(strings.NewReplacer(",", "_"))
 
 	if err := configCtl.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read %s config failed: %w", currEnv, err)

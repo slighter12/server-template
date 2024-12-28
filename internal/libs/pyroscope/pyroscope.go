@@ -41,7 +41,7 @@ func NewPyroscope(
 	}
 
 	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			return profiler.Stop()
 		},
 	})
