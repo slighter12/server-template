@@ -1,0 +1,35 @@
+edition = "2023";
+
+package auth.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/go_features.proto";
+
+option go_package = "server-template/proto/pb";
+option features.(pb.go).api_level = API_OPAQUE;
+
+// Auth service definition
+service Auth {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  Status status = 1;
+  User user = 2;
+}
+
+message User {
+  string id = 1;
+  string email = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message Status {
+  int32 code = 1;
+  string message = 2;
+}

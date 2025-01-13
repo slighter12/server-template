@@ -1,9 +1,9 @@
-.PHONY: help test-race lint sec-scan gci-format db-mysql-init build docker-image-build db-mysql-down db-mysql-up db-mysql-seeders-init gen-migrate-sql
+.PHONY: help test-race lint sec-scan gci-format db-mysql-init build docker-image-build db-mysql-down db-mysql-up db-mysql-seeders-init gen-migrate-sql proto.gen
 
 help: ## show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-PROJECT_NAME ?= 
+PROJECT_NAME ?=
 SQL_FILE_TIMESTAMP := $(shell date '+%Y%m%d%H%M%S')
 GitCommit := $(shell git rev-parse HEAD)
 Date := $(shell date -Iseconds)
@@ -107,3 +107,20 @@ docker-image-build: ## build Docker image
 		./
 
 DOCKER_PLATFORM ?= linux/amd64
+
+PROTO_DIR := proto/pb
+PROTO_GOOGLE := proto
+PROTO_GEN_DIR := proto/pb/gen
+
+proto.gen: ## generate protobuf code
+	for file in $$(find ${PROTO_DIR} -name *.proto); do \
+		protoc --proto_path=${PROTO_DIR} \
+			--proto_path=${PROTO_GOOGLE} \
+			--go_out=${PROTO_GEN_DIR} \
+			--go_opt=paths=source_relative \
+			--go-grpc_out=${PROTO_GEN_DIR} \
+			--go-grpc_opt=paths=source_relative \
+			--go_opt=default_api_level=API_OPAQUE \
+			--experimental_allow_proto3_optional \
+			$${file}; \
+	done

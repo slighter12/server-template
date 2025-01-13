@@ -46,10 +46,17 @@ type Config struct {
 			IsSecure bool   `json:"isSecure" yaml:"isSecure"`
 			Exporter string `json:"exporter" yaml:"exporter"` // 可選: "jaeger", "otlp-grpc", "otlp-http"
 		} `json:"otel" yaml:"otel"`
+		CloudProfiler struct {
+			Enable         bool   `json:"enable" yaml:"enable"`
+			ProjectID      string `json:"projectID" yaml:"projectID"`
+			ServiceAccount string `json:"serviceAccount" yaml:"serviceAccount"`
+		} `json:"cloudProfiler" yaml:"cloudProfiler"`
 	} `json:"observability" yaml:"observability"`
 
 	Mysql *mysql.DBConn `json:"mysql" yaml:"mysql"`
 	Redis *redis.Conn   `json:"redis" yaml:"redis"`
+
+	RPC map[string]RPCClientConfig `mapstructure:"rpc" yaml:"rpc"`
 }
 
 type Log struct {
@@ -58,6 +65,13 @@ type Log struct {
 	Path         string        `json:"path" yaml:"path"`
 	MaxAge       time.Duration `json:"maxAge" yaml:"maxAge"`
 	RotationTime time.Duration `json:"rotationTime" yaml:"rotationTime"`
+}
+
+type RPCClientConfig struct {
+	Endpoints     []string      `mapstructure:"endpoints" yaml:"endpoints"`
+	Timeout       time.Duration `mapstructure:"timeout" yaml:"timeout"`
+	Target        string        `mapstructure:"target" yaml:"target"`
+	KeepaliveTime time.Duration `mapstructure:"keepaliveTime" yaml:"keepaliveTime"`
 }
 
 // LoadWithEnv is a loads .yaml files through viper.
