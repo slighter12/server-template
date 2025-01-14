@@ -1,5 +1,7 @@
 package repository
 
-import pb "server-template/proto/pb/gen"
+import (
+	"server-template/proto/pb/authpb"
+)
 
-type AuthRPCRepository pb.AuthClient
+type AuthRPCRepository authpb.AuthClient

@@ -56,7 +56,7 @@ type Config struct {
 	Mysql *mysql.DBConn `json:"mysql" yaml:"mysql"`
 	Redis *redis.Conn   `json:"redis" yaml:"redis"`
 
-	RPC map[string]RPCClientConfig `mapstructure:"rpc" yaml:"rpc"`
+	RPC map[string]RPCClientConfig `mapstructure:"rpc" json:"rpc" yaml:"rpc"`
 }
 
 type Log struct {
@@ -68,10 +68,7 @@ type Log struct {
 }
 
 type RPCClientConfig struct {
-	Endpoints     []string      `mapstructure:"endpoints" yaml:"endpoints"`
-	Timeout       time.Duration `mapstructure:"timeout" yaml:"timeout"`
-	Target        string        `mapstructure:"target" yaml:"target"`
-	KeepaliveTime time.Duration `mapstructure:"keepaliveTime" yaml:"keepaliveTime"`
+	Target string `mapstructure:"target" json:"target" yaml:"target"`
 }
 
 // LoadWithEnv is a loads .yaml files through viper.

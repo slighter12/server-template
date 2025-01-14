@@ -1,7 +1,7 @@
 run:
   timeout: 3m
-  issues-exit-code: 1  # Standard exit code for issues, to align with best practices
-  tests: true  # Enable linting for test files to ensure code quality in tests as well
+  issues-exit-code: 1 # Standard exit code for issues, to align with best practices
+  tests: true # Enable linting for test files to ensure code quality in tests as well
 
 # Reference URL: https://golangci-lint.run/usage/linters/
 linters:
@@ -24,7 +24,7 @@ linters:
     - gocritic
     - gocyclo
     - godox
-    - gosec  # Security-related checks are important
+    - gosec # Security-related checks are important
     - govet
     - ineffassign
     - loggercheck
@@ -38,7 +38,7 @@ linters:
     - revive
     - rowserrcheck
     - sqlclosecheck
-    - staticcheck  # Recommended for catching many subtle issues
+    - staticcheck # Recommended for catching many subtle issues
     - stylecheck
     - typecheck
     - unconvert
@@ -60,6 +60,11 @@ issues:
         - wrapcheck
         - gocognit
         - contextcheck
+    - linters:
+        - lll
+      source: "^//go:generate "
+  exclude-dirs:
+    - cmd/generator
 
 linters-settings:
   gci:
@@ -69,36 +74,36 @@ linters-settings:
       - default # Default section: contains all imports that could not be matched to another section type.
     custom-order: true
   gocognit:
-    min-complexity: 20  # Reduce complexity threshold for better maintainability
+    min-complexity: 20 # Reduce complexity threshold for better maintainability
   gocritic:
-    disable-all: true  # Disable all checks by default to enable only stable and recommended checks
+    disable-all: true # Disable all checks by default to enable only stable and recommended checks
     enabled-checks:
-      - appendAssign  # Detects suspicious append result assignments
-      - argOrder  # Detects suspicious arguments order
-      - assignOp  # Detects assignments that can be simplified by using assignment operators
-      - badCall  # Detects suspicious function calls
-      - captLocal  # Detects capitalized names for local variables
-      - commentFormatting  # Detects comments with non-idiomatic formatting
-      - dupImport  # Detects multiple imports of the same package under different aliases
-      - equalFold  # Detects unoptimal strings/bytes case-insensitive comparison
-      - flagDeref  # Detects immediate dereferencing of `flag` package pointers
-      - hugeParam  # Detects params that incur excessive amount of copying
-      - indexAlloc  # Detects strings.Index calls that may cause unwanted allocs
-      - rangeValCopy  # Detects loops that copy big objects during each iteration
-      - regexpMust  # Detects `regexp.Compile*` that can be replaced with `regexp.MustCompile*`
-      - sloppyLen  # Detects usage of `len` when result is obvious or doesn't make sense
+      - appendAssign # Detects suspicious append result assignments
+      - argOrder # Detects suspicious arguments order
+      - assignOp # Detects assignments that can be simplified by using assignment operators
+      - badCall # Detects suspicious function calls
+      - captLocal # Detects capitalized names for local variables
+      - commentFormatting # Detects comments with non-idiomatic formatting
+      - dupImport # Detects multiple imports of the same package under different aliases
+      - equalFold # Detects unoptimal strings/bytes case-insensitive comparison
+      - flagDeref # Detects immediate dereferencing of `flag` package pointers
+      - hugeParam # Detects params that incur excessive amount of copying
+      - indexAlloc # Detects strings.Index calls that may cause unwanted allocs
+      - rangeValCopy # Detects loops that copy big objects during each iteration
+      - regexpMust # Detects `regexp.Compile*` that can be replaced with `regexp.MustCompile*`
+      - sloppyLen # Detects usage of `len` when result is obvious or doesn't make sense
   gosec:
     excludes:
-      - G115  # Potential integer overflow when converting between integer types
+      - G115 # Potential integer overflow when converting between integer types
   lll:
-    line-length: 100  # Reduce max line length to encourage better readability
-    tab-width: 4  # Align tab width with typical Go coding standards for better consistency
+    line-length: 100 # Reduce max line length to encourage better readability
+    tab-width: 4 # Align tab width with typical Go coding standards for better consistency
   misspell:
-    locale: US  # Set locale to standardize spelling checks
+    locale: US # Set locale to standardize spelling checks
   nestif:
-    min-complexity: 5  # Make the rule stricter to catch nested if statements earlier
+    min-complexity: 5 # Make the rule stricter to catch nested if statements earlier
   revive:
-    severity: warning  # Revive rules as warnings to encourage addressing them without failing the build
+    severity: warning # Revive rules as warnings to encourage addressing them without failing the build
   varnamelen:
     ignore-decls:
-    - lc fx.Lifecycle
+      - lc fx.Lifecycle

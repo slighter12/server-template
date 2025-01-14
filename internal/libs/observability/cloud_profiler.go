@@ -23,6 +23,7 @@ func newSlogWriter(logger *slog.Logger) *slogWriter {
 // Write implements the io.Writer interface
 func (lw *slogWriter) Write(p []byte) (n int, err error) {
 	lw.logger.Debug(string(p))
+
 	return len(p), nil
 }
 

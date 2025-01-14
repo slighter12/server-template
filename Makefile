@@ -108,19 +108,13 @@ docker-image-build: ## build Docker image
 
 DOCKER_PLATFORM ?= linux/amd64
 
-PROTO_DIR := proto/pb
-PROTO_GOOGLE := proto
-PROTO_GEN_DIR := proto/pb/gen
-
 proto.gen: ## generate protobuf code
-	for file in $$(find ${PROTO_DIR} -name *.proto); do \
-		protoc --proto_path=${PROTO_DIR} \
-			--proto_path=${PROTO_GOOGLE} \
-			--go_out=${PROTO_GEN_DIR} \
-			--go_opt=paths=source_relative \
-			--go-grpc_out=${PROTO_GEN_DIR} \
-			--go-grpc_opt=paths=source_relative \
-			--go_opt=default_api_level=API_OPAQUE \
-			--experimental_allow_proto3_optional \
-			$${file}; \
-	done
+	protoc --proto_path=proto/pb \
+		--proto_path=${GOPATH}/pkg/mod/google.golang.org/protobuf@v1.36.2/src \
+		--go_out=proto/pb/authpb \
+		--go_opt=paths=source_relative \
+		--go-grpc_out=proto/pb/authpb \
+		--go-grpc_opt=paths=source_relative \
+		--go_opt=default_api_level=API_OPAQUE \
+		--experimental_allow_proto3_optional \
+		proto/pb/auth.proto

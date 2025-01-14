@@ -10,11 +10,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"go.uber.org/fx"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type authUseCase struct {
+	fx.In
+
 	userRepo repository.UserRepository
 }
 
@@ -51,7 +54,7 @@ func (uc *authUseCase) Register(ctx context.Context, email, hashedPassword strin
 
 	// 加密密碼
 	if err := user.HashPassword(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "vertify password failed")
 	}
 
 	if err := uc.userRepo.Create(ctx, user); err != nil {

@@ -5,7 +5,7 @@ package auth.v1;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/go_features.proto";
 
-option go_package = "server-template/proto/pb";
+option go_package = "server-template/proto/authpb";
 option features.(pb.go).api_level = API_OPAQUE;
 
 // Auth service definition

@@ -30,5 +30,6 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*entity
 	if err != nil {
 		return nil, err
 	}
+
 	return &user, nil
 }

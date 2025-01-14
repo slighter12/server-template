@@ -19,6 +19,7 @@ func (u *User) Validate() error {
 	if u.Email == "" {
 		return errors.New("email is required")
 	}
+
 	return nil
 }
 
@@ -28,5 +29,6 @@ func (u *User) HashPassword() error {
 		return errors.Wrap(err, "failed to hash password")
 	}
 	u.Password = string(hashedPassword)
+
 	return nil
 }

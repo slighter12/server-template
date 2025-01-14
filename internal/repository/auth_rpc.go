@@ -3,20 +3,16 @@ package repository
 import (
 	"server-template/internal/domain/repository"
 	"server-template/internal/libs/rpc"
-	pb "server-template/proto/pb/gen"
+	"server-template/proto/pb/authpb"
 
-	"go.uber.org/fx"
+	"github.com/pkg/errors"
 )
 
-type authRPCParams struct {
-	fx.In
-	*rpc.RPCClients
-}
-
-func NewAuthRPC(params authRPCParams) (repository.AuthRPCRepository, error) {
-	client, err := params.RPCClients.GetClient(rpc.AuthClient)
+func NewAuthRPC(rpcClients *rpc.RPCClients) (repository.AuthRPCRepository, error) {
+	client, err := rpcClients.GetClient(rpc.AuthClient)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
-	return pb.NewAuthClient(client.Conn()), nil
+
+	return authpb.NewAuthClient(client), nil
 }
