@@ -1,0 +1,5 @@
+{
+    "go.lintTool": "golangci-lint",
+    "cursor.composer.agentLoopOnLints": true,
+    "go.lintOnSave": "workspace"
+}

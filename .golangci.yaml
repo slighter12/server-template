@@ -107,3 +107,4 @@ linters-settings:
   varnamelen:
     ignore-decls:
       - lc fx.Lifecycle
+      - ok bool

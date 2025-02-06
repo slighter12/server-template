@@ -1,36 +1,45 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"text/template"
 
 	"github.com/spf13/pflag"
 )
 
-// 定義模板類型和路徑的映射
+//go:embed templates/otel_proxy.tmpl
+var otelProxyTmpl string
+
+// 定義模板類型和對應的模板內容
 var templateMap = map[string]string{
-	"otel": "internal/templates/otel_proxy.tmpl",
+	"otel": otelProxyTmpl,
 }
 
 type Method struct {
 	Name       string
 	Params     string
-	Results    string
+	Results    []string // 改為 slice 存儲所有返回值
 	CallParams string
 	HasError   bool
 }
 
 type TemplateData struct {
-	PackageName   string
-	ProxyName     string
-	InterfaceName string
-	TracerName    string
-	Methods       []Method
+	PackageName     string
+	ProxyName       string
+	InterfaceName   string
+	TracerName      string
+	Methods         []Method
+	Imports         []string
+	InterfacePrefix string
 }
 
 func main() {
@@ -67,18 +76,20 @@ func main() {
 	}
 
 	// 解析接口文件
-	methods, err := parseInterfaceMethods(sourceFile, interfaceName)
+	methods, imports, interfacePrefix, err := parseInterfaceMethods(sourceFile, outputFile, interfaceName)
 	if err != nil {
 		log.Fatalf("Failed to parse interface: %v", err)
 	}
 
 	// 構造模板數據
 	data := TemplateData{
-		PackageName:   packageName,
-		ProxyName:     interfaceName + "Proxy",
-		InterfaceName: interfaceName,
-		TracerName:    tracerName,
-		Methods:       methods,
+		PackageName:     packageName,
+		ProxyName:       interfaceName + "Proxy",
+		InterfaceName:   interfaceName,
+		TracerName:      tracerName,
+		Methods:         methods,
+		Imports:         imports,
+		InterfacePrefix: interfacePrefix,
 	}
 
 	// 生成代碼
@@ -90,12 +101,73 @@ func main() {
 	fmt.Printf("Proxy for interface '%s' generated at '%s' using template '%s'\n", interfaceName, outputFile, templateType)
 }
 
-func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, error) {
+func parseInterfaceMethods(sourceFile, outputFile, interfaceName string) ([]Method, []string, string, error) {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, sourceFile, nil, parser.AllErrors)
 	if err != nil {
-		return nil, err
+		return nil, nil, "", err
 	}
+
+	// 收集 imports
+	imports := []string{}
+
+	// 獲取當前工作目錄
+	workDir, err := os.Getwd()
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("failed to get working directory: %v", err)
+	}
+
+	// 將相對路徑轉換為絕對路徑
+	absSourcePath, err := filepath.Abs(filepath.Join(workDir, sourceFile))
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("failed to get absolute source path: %v", err)
+	}
+
+	absOutputPath, err := filepath.Abs(filepath.Join(workDir, outputFile))
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("failed to get absolute output path: %v", err)
+	}
+
+	// 比較源文件和輸出文件的路徑
+	sourcePath := filepath.Dir(absSourcePath)
+	outputPath := filepath.Dir(absOutputPath)
+
+	// 決定接口前綴
+	interfacePrefix := ""
+	if sourcePath != outputPath {
+		interfacePrefix = "repository."
+	}
+
+	// 從源文件路徑中提取包路徑
+	// 假設項目結構是 server-template/internal/...
+	idx := strings.Index(sourcePath, "internal")
+	if idx != -1 {
+		packagePath := sourcePath[idx:]
+		importPath := fmt.Sprintf(`"server-template/%s"`, packagePath)
+		imports = append(imports, importPath)
+	}
+
+	// 收集其他 imports
+	for _, imp := range node.Imports {
+		imports = append(imports, imp.Path.Value)
+	}
+
+	// 對 imports 進行排序
+	sort.Slice(imports, func(i, j int) bool {
+		// 移除引號進行比較
+		iStr := strings.Trim(imports[i], `"`)
+		jStr := strings.Trim(imports[j], `"`)
+
+		// 先比較大小寫（大寫優先）
+		iHasUpper := strings.ToLower(iStr) != iStr
+		jHasUpper := strings.ToLower(jStr) != jStr
+		if iHasUpper != jHasUpper {
+			return iHasUpper
+		}
+
+		// 然後按字母順序排序
+		return iStr < jStr
+	})
 
 	var methods []Method
 	ast.Inspect(node, func(n ast.Node) bool {
@@ -134,7 +206,7 @@ func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, error) {
 		return false
 	})
 
-	return methods, nil
+	return methods, imports, interfacePrefix, nil
 }
 
 func formatParams(fields *ast.FieldList) (string, string) {
@@ -142,39 +214,40 @@ func formatParams(fields *ast.FieldList) (string, string) {
 		return "", ""
 	}
 
-	var params, callParams string
-	for i, f := range fields.List {
-		for j, name := range f.Names {
-			if i > 0 || j > 0 {
-				params += ", "
-				callParams += ", "
+	var paramParts []string
+	var callParts []string
+
+	for _, f := range fields.List {
+		t := formatType(f.Type)
+		if len(f.Names) > 0 {
+			for _, name := range f.Names {
+				paramParts = append(paramParts, name.Name+" "+t)
+				callParts = append(callParts, name.Name)
 			}
-			params += fmt.Sprintf("%s %s", name, formatType(f.Type))
-			callParams += name.Name
+		} else {
+			paramParts = append(paramParts, t)
 		}
 	}
-	return params, callParams
+
+	return strings.Join(paramParts, ", "), strings.Join(callParts, ", ")
 }
 
-func formatResults(fields *ast.FieldList) (string, bool) {
+func formatResults(fields *ast.FieldList) ([]string, bool) {
 	if fields == nil {
-		return "", false
+		return nil, false
 	}
 
-	var results string
+	var results []string
 	hasError := false
-	for i, f := range fields.List {
-		if i > 0 {
-			results += ", "
-		}
 
+	for _, f := range fields.List {
 		t := formatType(f.Type)
-		results += t
-
 		if t == "error" {
 			hasError = true
 		}
+		results = append(results, t)
 	}
+
 	return results, hasError
 }
 
@@ -188,19 +261,21 @@ func formatType(expr ast.Expr) string {
 		return fmt.Sprintf("%s.%s", formatType(t.X), t.Sel.Name)
 	case *ast.ArrayType:
 		return "[]" + formatType(t.Elt)
+	case *ast.MapType:
+		return fmt.Sprintf("map[%s]%s", formatType(t.Key), formatType(t.Value))
+	case *ast.InterfaceType:
+		return "interface{}"
 	default:
-		return ""
+		return fmt.Sprintf("/* unsupported type %T */", expr)
 	}
 }
 
 func generateCode(templatePath, outputFile string, data TemplateData) error {
-	// 讀取模板文件
-	tmplContent, err := os.ReadFile(templatePath)
-	if err != nil {
-		return fmt.Errorf("failed to read template file: %w", err)
+	funcMap := template.FuncMap{
+		"sub": func(a, b int) int { return a - b },
 	}
 
-	tmpl, err := template.New("proxy").Parse(string(tmplContent))
+	tmpl, err := template.New("proxy").Funcs(funcMap).Parse(templatePath)
 	if err != nil {
 		return err
 	}
@@ -219,5 +294,6 @@ func getSupportedTemplates() []string {
 	for key := range templateMap {
 		keys = append(keys, key)
 	}
+
 	return keys
 }
