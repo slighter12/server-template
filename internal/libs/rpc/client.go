@@ -45,7 +45,7 @@ func NewRPCClients(params rpcClientsParams) (*RPCClients, error) {
 	}
 
 	// 遍歷配置創建客戶端
-	for clientName, clientConfig := range params.Config.RPC {
+	for clientName, clientConfig := range params.Config.RPC.Clients {
 		clientConn, err := grpc.NewClient(clientConfig.Target, opts...)
 
 		if err != nil {

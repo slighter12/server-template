@@ -56,7 +56,12 @@ type Config struct {
 	Mysql *mysql.DBConn `json:"mysql" yaml:"mysql"`
 	Redis *redis.Conn   `json:"redis" yaml:"redis"`
 
-	RPC map[string]RPCClientConfig `mapstructure:"rpc" json:"rpc" yaml:"rpc"`
+	RPC struct {
+		Clients map[string]RPCClientConfig `mapstructure:"clients" json:"clients" yaml:"clients"`
+		Server  struct {
+			Target string `mapstructure:"target" json:"target" yaml:"target"`
+		} `mapstructure:"server" json:"server" yaml:"server"`
+	} `mapstructure:"rpc" json:"rpc" yaml:"rpc"`
 }
 
 type Log struct {

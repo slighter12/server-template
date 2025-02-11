@@ -1,7 +1,11 @@
 package delivery
 
-import "context"
+import (
+	"context"
+
+	"go.uber.org/fx"
+)
 
 type Delivery interface {
-	Serve(ctx context.Context) error
+	Serve(lc fx.Lifecycle, ctx context.Context)
 }

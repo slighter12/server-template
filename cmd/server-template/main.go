@@ -5,6 +5,9 @@ import (
 	"log/slog"
 
 	"server-template/config"
+	"server-template/internal/delivery/grpc"
+	"server-template/internal/delivery/http"
+	"server-template/internal/domain/delivery"
 	repo "server-template/internal/domain/repository"
 	use "server-template/internal/domain/usecase"
 	"server-template/internal/libs/logs"
@@ -25,6 +28,7 @@ func main() {
 		injectConn(),
 		injectRepo(),
 		injectUse(),
+		injectDelivery(),
 		fx.Invoke(
 			observability.NewPyroscope,
 			observability.NewTracer,
@@ -74,10 +78,28 @@ func injectUse() fx.Option {
 	)
 }
 
-func startServer(lc fx.Lifecycle, ctx context.Context) error {
+func injectDelivery() fx.Option {
+	return fx.Options(
+		fx.Provide(
+			http.NewHTTP,
+			grpc.NewGRPC,
+			fx.Annotate(
+				func(http, grpc delivery.Delivery) []delivery.Delivery {
+					return []delivery.Delivery{http, grpc}
+				},
+				fx.ParamTags(`group:"delivery"`, `group:"delivery"`),
+				fx.ResultTags(`group:"deliveries"`),
+			),
+		),
+	)
+}
+
+func startServer(lc fx.Lifecycle, ctx context.Context, deliveries []delivery.Delivery) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			slog.Info("Starting server...")
+			for _, d := range deliveries {
+				d.Serve(lc, ctx)
+			}
 
 			return nil
 		},
@@ -87,7 +109,4 @@ func startServer(lc fx.Lifecycle, ctx context.Context) error {
 			return nil
 		},
 	})
-
-	// 這裡整合你的 fx 邏輯，或者加載配置、啟動應用
-	return nil
 }
