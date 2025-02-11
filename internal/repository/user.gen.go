@@ -13,8 +13,25 @@ import (
 type UserRepositoryProxy struct {
 	UserRepository repository.UserRepository
 }
+
+// newUserRepositoryProxy creates a new proxy with OpenTelemetry instrumentation
+func newUserRepositoryProxy(base repository.UserRepository) repository.UserRepository {
+	return &UserRepositoryProxy{
+		UserRepository: base,
+	}
+}
+
+// ProvideUserRepositoryProxy returns a function that decorates the original implementation with OpenTelemetry instrumentation
+func ProvideUserRepositoryProxy(enableTracing bool, base repository.UserRepository) repository.UserRepository {
+	if !enableTracing {
+		return base
+	}
+	
+	return newUserRepositoryProxy(base)
+}
+
 func (p *UserRepositoryProxy) Create(ctx context.Context, user *entity.User) (error) {
-	tracer := otel.Tracer("quote-tracer")
+	tracer := otel.Tracer("user-repo-tracer")
 	ctx, span := tracer.Start(ctx, "Create")
 	defer span.End()
 
@@ -28,7 +45,7 @@ func (p *UserRepositoryProxy) Create(ctx context.Context, user *entity.User) (er
 }
 
 func (p *UserRepositoryProxy) FindByEmail(ctx context.Context, email string) (*entity.User, error) {
-	tracer := otel.Tracer("quote-tracer")
+	tracer := otel.Tracer("user-repo-tracer")
 	ctx, span := tracer.Start(ctx, "FindByEmail")
 	defer span.End()
 
@@ -40,4 +57,3 @@ func (p *UserRepositoryProxy) FindByEmail(ctx context.Context, email string) (*e
 
 	return ret0, err
 }
-

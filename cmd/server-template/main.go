@@ -5,6 +5,8 @@ import (
 	"log/slog"
 
 	"server-template/config"
+	repo "server-template/internal/domain/repository"
+	use "server-template/internal/domain/usecase"
 	"server-template/internal/libs/logs"
 	"server-template/internal/libs/mongo"
 	"server-template/internal/libs/mysql"
@@ -50,21 +52,42 @@ func injectConn() fx.Option {
 }
 
 func injectRepo() fx.Option {
-	return fx.Provide(
-		repository.NewAuthRPC,
-		repository.NewUserRepository,
+	return fx.Options(
+		fx.Provide(
+			repository.NewAuthRPC,
+			repository.NewUserRepository,
+		),
+		fx.Decorate(func(cfg *config.Config, base repo.UserRepository) repo.UserRepository {
+			return repository.ProvideUserRepositoryProxy(cfg.Observability.Otel.Enable, base)
+		}),
 	)
 }
 
 func injectUse() fx.Option {
-	return fx.Provide(
-		usecase.NewAuthUseCase,
+	return fx.Options(
+		fx.Provide(
+			usecase.NewAuthUseCase,
+		),
+		fx.Decorate(func(cfg *config.Config, base use.AuthUseCase) use.AuthUseCase {
+			return usecase.ProvideAuthUseCaseProxy(cfg.Observability.Otel.Enable, base)
+		}),
 	)
 }
 
-func startServer(ctx context.Context) error {
-	// 啟動邏輯
-	slog.Info("Starting server...")
+func startServer(lc fx.Lifecycle, ctx context.Context) error {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			slog.Info("Starting server...")
+
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			slog.Info("Stopping server...")
+
+			return nil
+		},
+	})
+
 	// 這裡整合你的 fx 邏輯，或者加載配置、啟動應用
 	return nil
 }

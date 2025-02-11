@@ -11,8 +11,24 @@ import (
 )
 
 type {{.ProxyName}} struct {
-	{{.InterfaceName}} {{.InterfacePrefix}}{{.InterfaceName}}
+	{{.InterfaceName}} {{.PackageName}}.{{.InterfaceName}}
 }
+
+// new{{.ProxyName}} creates a new proxy with OpenTelemetry instrumentation
+func new{{.ProxyName}}(base {{.PackageName}}.{{.InterfaceName}}) {{.PackageName}}.{{.InterfaceName}} {
+	return &{{.ProxyName}}{
+		{{.InterfaceName}}: base,
+	}
+}
+
+// Provide{{.ProxyName}} returns a function that decorates the original implementation with OpenTelemetry instrumentation
+func Provide{{.ProxyName}}(enableTracing bool, base {{.PackageName}}.{{.InterfaceName}}) {{.PackageName}}.{{.InterfaceName}} {
+	if !enableTracing {
+		return base
+	}
+	
+	return new{{.ProxyName}}(base)
+}{{"\n"}}
 
 {{- range .Methods}}
 func (p *{{$.ProxyName}}) {{.Name}}({{.Params}}) {{if .Results}}({{range $i, $r := .Results}}{{if $i}}, {{end}}{{$r}}{{end}}){{end}} {
