@@ -53,8 +53,8 @@ type Config struct {
 		} `json:"cloudProfiler" yaml:"cloudProfiler"`
 	} `json:"observability" yaml:"observability"`
 
-	Mysql *mysql.DBConn `json:"mysql" yaml:"mysql"`
-	Redis *redis.Conn   `json:"redis" yaml:"redis"`
+	Mysql map[string]*mysql.DBConn `json:"mysql" yaml:"mysql" mapstructure:"mysql"`
+	Redis *redis.Conn              `json:"redis" yaml:"redis"`
 
 	RPC struct {
 		Clients map[string]RPCClientConfig `mapstructure:"clients" json:"clients" yaml:"clients"`

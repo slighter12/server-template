@@ -19,7 +19,9 @@ import (
 	"server-template/internal/repository"
 	"server-template/internal/usecase"
 
+	"github.com/pkg/errors"
 	"go.uber.org/fx"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -33,7 +35,10 @@ func main() {
 			observability.NewPyroscope,
 			observability.NewTracer,
 			observability.NewCloudProfiler,
-			startServer,
+			fx.Annotate(
+				startServer,
+				fx.ParamTags(``, ``, `group:"deliveries"`),
+			),
 		),
 	).Run()
 }
@@ -47,11 +52,40 @@ func injectInfra() fx.Option {
 }
 
 func injectConn() fx.Option {
-	return fx.Provide(
-		mysql.New,
-		redis.NewClusterClient,
-		mongo.New,
-		rpc.NewRPCClients,
+	return fx.Options(
+		fx.Provide(
+			// Provide multiple MySQL connections
+			func(cfg *config.Config, lc fx.Lifecycle) (map[string]*gorm.DB, error) {
+				dbMap := make(map[string]*gorm.DB)
+				for name, dbCfg := range cfg.Mysql {
+					dbConn, err := mysql.New(lc, dbCfg, name)
+					if err != nil {
+						slog.Error("Failed to create MySQL connection", slog.String("name", name), slog.Any("error", err))
+
+						return nil, errors.Wrap(err, "mysql.New") // Return the error to prevent the application from starting
+					}
+					dbMap[name] = dbConn
+				}
+
+				return dbMap, nil
+			},
+			fx.Annotate(
+				func(dbMap map[string]*gorm.DB) (*gorm.DB, error) {
+					db, ok := dbMap["default"]
+					if !ok {
+						return nil, errors.New("default database not found")
+					}
+
+					return db, nil
+				},
+				fx.ResultTags(`name:"default"`),
+			),
+		),
+		fx.Provide(
+			redis.NewClusterClient,
+			mongo.New,
+			rpc.NewRPCClients,
+		),
 	)
 }
 
@@ -59,7 +93,10 @@ func injectRepo() fx.Option {
 	return fx.Options(
 		fx.Provide(
 			repository.NewAuthRPC,
-			repository.NewUserRepository,
+			fx.Annotate(
+				repository.NewUserRepository,
+				fx.ParamTags(`name:"default"`),
+			),
 		),
 		fx.Decorate(func(cfg *config.Config, base repo.UserRepository) repo.UserRepository {
 			return repository.ProvideUserRepositoryProxy(cfg.Observability.Otel.Enable, base)
@@ -81,13 +118,12 @@ func injectUse() fx.Option {
 func injectDelivery() fx.Option {
 	return fx.Options(
 		fx.Provide(
-			http.NewHTTP,
-			grpc.NewGRPC,
 			fx.Annotate(
-				func(http, grpc delivery.Delivery) []delivery.Delivery {
-					return []delivery.Delivery{http, grpc}
-				},
-				fx.ParamTags(`group:"delivery"`, `group:"delivery"`),
+				http.NewHTTP,
+				fx.ResultTags(`group:"deliveries"`),
+			),
+			fx.Annotate(
+				grpc.NewGRPC,
 				fx.ResultTags(`group:"deliveries"`),
 			),
 		),
@@ -97,8 +133,9 @@ func injectDelivery() fx.Option {
 func startServer(lc fx.Lifecycle, ctx context.Context, deliveries []delivery.Delivery) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			for _, d := range deliveries {
-				d.Serve(lc, ctx)
+			for _, delivery := range deliveries {
+				slog.Info("Starting server...", slog.Any("delivery", delivery))
+				delivery.Serve(lc, ctx)
 			}
 
 			return nil

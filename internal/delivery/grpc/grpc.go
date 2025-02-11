@@ -17,13 +17,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type grpcServerParams struct {
-	fx.In
-
-	auth usecase.AuthUseCase
-	cfg  *config.Config
-}
-
 type grpcServer struct {
 	fx.In
 	authpb.UnimplementedAuthServer
@@ -31,10 +24,10 @@ type grpcServer struct {
 	cfg  *config.Config
 }
 
-func NewGRPC(params grpcServerParams) delivery.Delivery {
+func NewGRPC(auth usecase.AuthUseCase, cfg *config.Config) delivery.Delivery {
 	return &grpcServer{
-		auth: params.auth,
-		cfg:  params.cfg,
+		auth: auth,
+		cfg:  cfg,
 	}
 }
 
