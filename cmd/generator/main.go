@@ -141,28 +141,34 @@ func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, []string
 		return nil, nil, errors.Wrap(err, "failed to parse interface")
 	}
 
-	// 收集 imports
-	imports := []string{}
-
-	// 獲取當前工作目錄
-	workDir, err := os.Getwd()
+	imports, err := collectImports(node, sourceFile)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get working directory")
+		return nil, nil, err
 	}
 
-	// 將相對路徑轉換為絕對路徑
+	methods := extractMethods(node, interfaceName)
+
+	return methods, imports, nil
+}
+
+func collectImports(node *ast.File, sourceFile string) ([]string, error) {
+	imports := []string{}
+
+	workDir, err := os.Getwd()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get working directory")
+	}
+
 	absSourcePath, err := filepath.Abs(filepath.Join(workDir, sourceFile))
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get absolute source path")
+		return nil, errors.Wrap(err, "failed to get absolute source path")
 	}
 
 	sourcePath := filepath.Dir(absSourcePath)
 
-	// 從源文件路徑中提取包路徑
-	// 先獲取模組名稱
 	moduleName, err := getModuleName()
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get module name")
+		return nil, errors.Wrap(err, "failed to get module name")
 	}
 
 	moduleIdx := strings.Index(sourcePath, moduleName)
@@ -172,28 +178,27 @@ func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, []string
 		imports = append(imports, importPath)
 	}
 
-	// 收集其他 imports
 	for _, imp := range node.Imports {
 		imports = append(imports, imp.Path.Value)
 	}
 
-	// 對 imports 進行排序
 	sort.Slice(imports, func(i, j int) bool {
-		// 移除引號進行比較
 		iStr := strings.Trim(imports[i], `"`)
 		jStr := strings.Trim(imports[j], `"`)
 
-		// 先比較大小寫（大寫優先）
 		iHasUpper := strings.ToLower(iStr) != iStr
 		jHasUpper := strings.ToLower(jStr) != jStr
 		if iHasUpper != jHasUpper {
 			return iHasUpper
 		}
 
-		// 然後按字母順序排序
 		return iStr < jStr
 	})
 
+	return imports, nil
+}
+
+func extractMethods(node *ast.File, interfaceName string) []Method {
 	var methods []Method
 	ast.Inspect(node, func(n ast.Node) bool {
 		ts, ok := n.(*ast.TypeSpec)
@@ -231,7 +236,7 @@ func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, []string
 		return false
 	})
 
-	return methods, imports, nil
+	return methods
 }
 
 func formatParams(fields *ast.FieldList) (string, string) {
