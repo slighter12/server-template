@@ -1,0 +1,14 @@
+generators:
+  - source: ./internal/domain/repository/user.go
+    output: ./internal/repository/user.gen.go
+    interface: UserRepository
+    package: repository
+    tracer: user-repo-tracer
+    template: otel
+  
+  - source: ./internal/domain/usecase/auth.go
+    output: ./internal/usecase/auth.gen.go
+    interface: AuthUseCase
+    package: usecase
+    tracer: auth-usecase-tracer
+    template: otel

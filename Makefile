@@ -118,3 +118,8 @@ proto.gen: ## generate protobuf code
 		--go_opt=default_api_level=API_OPAQUE \
 		--experimental_allow_proto3_optional \
 		proto/pb/auth.proto
+
+gen-proxy: ## generate proxy code
+	go build -o generator cmd/generator/main.go
+	./generator --config=.generator.yaml
+	rm generator

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 
-	"server-template/config"
 	"server-template/internal/domain/entity"
 	"server-template/internal/domain/repository"
 
@@ -19,21 +18,6 @@ type userRepository struct {
 
 func NewUserRepository(db *gorm.DB) repository.UserRepository {
 	return &userRepository{db: db}
-}
-
-func ProvideUserRepository(cfg *config.Config, db *gorm.DB) any {
-	impl := NewUserRepository(db)
-
-	// If tracing is disabled, return the implementation directly
-	if !cfg.Observability.Otel.Enable {
-		return impl
-	}
-
-	// If tracing is enabled, return the annotated version
-	return fx.Annotate(
-		impl,
-		fx.ResultTags(`name:"original"`),
-	)
 }
 
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {

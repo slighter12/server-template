@@ -13,7 +13,9 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed templates/otel_proxy.tmpl
@@ -33,79 +35,110 @@ type Method struct {
 }
 
 type TemplateData struct {
-	PackageName     string
-	ProxyName       string
-	InterfaceName   string
-	TracerName      string
-	Methods         []Method
-	Imports         []string
-	InterfacePrefix string
+	PackageName   string
+	ProxyName     string
+	InterfaceName string
+	TracerName    string
+	Methods       []Method
+	Imports       []string
+}
+
+type GeneratorConfig struct {
+	Generators []struct {
+		Source    string `yaml:"source"`
+		Output    string `yaml:"output"`
+		Interface string `yaml:"interface"`
+		Package   string `yaml:"package"`
+		Tracer    string `yaml:"tracer"`
+		Template  string `yaml:"template"`
+	} `yaml:"generators"`
 }
 
 func main() {
-	// 命令行參數
-	var (
-		sourceFile    string
-		outputFile    string
-		packageName   string
-		interfaceName string
-		tracerName    string
-		templateType  string
-	)
+	configPath := pflag.String("config", "", "Path to config file")
 
-	// 定義參數
-	pflag.StringVar(&sourceFile, "source", "", "Source file containing the interface")
-	pflag.StringVar(&outputFile, "output", "proxy.gen.go", "Output file for the generated proxy")
-	pflag.StringVar(&packageName, "package", "", "Package name for the generated proxy")
-	pflag.StringVar(&interfaceName, "interface", "", "Interface to generate proxy for")
-	pflag.StringVar(&tracerName, "tracer", "", "Tracer name for the generated proxy")
-	pflag.StringVar(&templateType, "template", "", "Template type (e.g., otel ...)")
+	// 保留原有的 flags 以維持向下相容
+	sourceFile := pflag.String("source", "", "Source file containing the interface")
+	outputFile := pflag.String("output", "proxy.gen.go", "Output file for the generated proxy")
+	interfaceName := pflag.String("interface", "", "Interface to generate proxy for")
+	packageName := pflag.String("package", "", "Package name for the generated proxy")
+	tracerName := pflag.String("tracer", "", "Tracer name for the generated proxy")
+	templateType := pflag.String("template", "", "Template type (e.g., otel ...)")
 
-	// 解析參數
 	pflag.Parse()
 
+	if *configPath != "" {
+		// 讀取設定檔
+		configData, err := os.ReadFile(*configPath)
+		if err != nil {
+			log.Fatalf("Error reading config file: %v", err)
+		}
+
+		var config GeneratorConfig
+		if err := yaml.Unmarshal(configData, &config); err != nil {
+			log.Fatalf("Error parsing config file: %v", err)
+		}
+
+		// 處理每個生成任務
+		for _, gen := range config.Generators {
+			if err := generate(gen.Source, gen.Output, gen.Interface, gen.Package, gen.Tracer, gen.Template); err != nil {
+				log.Fatalf("Error generating proxy: %v", err)
+			}
+		}
+
+		return
+	}
+
+	// 使用命令列參數的情況
+	if err := generate(*sourceFile, *outputFile, *interfaceName, *packageName, *tracerName, *templateType); err != nil {
+		log.Fatalf("Error generating proxy: %v", err)
+	}
+}
+
+func generate(source, output, interfaceName, packageName, tracerName, templateType string) error {
 	// 校驗參數
-	if sourceFile == "" || interfaceName == "" || templateType == "" {
-		log.Fatal("source, interface, and template must be specified")
+	if source == "" || interfaceName == "" || templateType == "" {
+		return fmt.Errorf("source, interface, and template must be specified")
 	}
 
 	// 從模板映射中獲取模板文件路徑
 	templateFile, ok := templateMap[templateType]
 	if !ok {
-		log.Fatalf("Unsupported template type: %s. Supported types: %v", templateType, getSupportedTemplates())
+		return fmt.Errorf("Unsupported template type: %s. Supported types: %v", templateType, getSupportedTemplates())
 	}
 
 	// 解析接口文件
-	methods, imports, interfacePrefix, err := parseInterfaceMethods(sourceFile, outputFile, interfaceName)
+	methods, imports, err := parseInterfaceMethods(source, interfaceName)
 	if err != nil {
-		log.Fatalf("Failed to parse interface: %v", err)
+		return fmt.Errorf("Failed to parse interface: %v", err)
 	}
 
 	// 構造模板數據
 	data := TemplateData{
-		PackageName:     packageName,
-		ProxyName:       interfaceName + "Proxy",
-		InterfaceName:   interfaceName,
-		TracerName:      tracerName,
-		Methods:         methods,
-		Imports:         imports,
-		InterfacePrefix: interfacePrefix,
+		PackageName:   packageName,
+		ProxyName:     interfaceName + "Proxy",
+		InterfaceName: interfaceName,
+		TracerName:    tracerName,
+		Methods:       methods,
+		Imports:       imports,
 	}
 
 	// 生成代碼
-	err = generateCode(templateFile, outputFile, data)
+	err = generateCode(templateFile, output, data)
 	if err != nil {
-		log.Fatalf("Failed to generate code: %v", err)
+		return fmt.Errorf("Failed to generate code: %v", err)
 	}
 
-	fmt.Printf("Proxy for interface '%s' generated at '%s' using template '%s'\n", interfaceName, outputFile, templateType)
+	fmt.Printf("Proxy for interface '%s' generated at '%s' using template '%s'\n", interfaceName, output, templateType)
+
+	return nil
 }
 
-func parseInterfaceMethods(sourceFile, outputFile, interfaceName string) ([]Method, []string, string, error) {
+func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, []string, error) {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, sourceFile, nil, parser.AllErrors)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, errors.Wrap(err, "failed to parse interface")
 	}
 
 	// 收集 imports
@@ -114,29 +147,17 @@ func parseInterfaceMethods(sourceFile, outputFile, interfaceName string) ([]Meth
 	// 獲取當前工作目錄
 	workDir, err := os.Getwd()
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to get working directory: %v", err)
+		return nil, nil, errors.Wrap(err, "failed to get working directory")
 	}
 
 	// 將相對路徑轉換為絕對路徑
 	absSourcePath, err := filepath.Abs(filepath.Join(workDir, sourceFile))
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to get absolute source path: %v", err)
-	}
-
-	absOutputPath, err := filepath.Abs(filepath.Join(workDir, outputFile))
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to get absolute output path: %v", err)
+		return nil, nil, errors.Wrap(err, "failed to get absolute source path")
 	}
 
 	// 比較源文件和輸出文件的路徑
 	sourcePath := filepath.Dir(absSourcePath)
-	outputPath := filepath.Dir(absOutputPath)
-
-	// 決定接口前綴
-	interfacePrefix := ""
-	if sourcePath != outputPath {
-		interfacePrefix = "repository."
-	}
 
 	// 從源文件路徑中提取包路徑
 	// 假設項目結構是 server-template/internal/...
@@ -206,7 +227,7 @@ func parseInterfaceMethods(sourceFile, outputFile, interfaceName string) ([]Meth
 		return false
 	})
 
-	return methods, imports, interfacePrefix, nil
+	return methods, imports, nil
 }
 
 func formatParams(fields *ast.FieldList) (string, string) {
