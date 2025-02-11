@@ -316,7 +316,7 @@ func generateCode(templatePath, outputFile string, data *TemplateData) error {
 	}
 	defer file.Close()
 
-	return tmpl.Execute(file, data)
+	return errors.Wrap(tmpl.Execute(file, data), "failed to execute template")
 }
 
 func getSupportedTemplates() []string {
