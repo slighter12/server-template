@@ -104,7 +104,7 @@ func generate(source, output, interfaceName, packageName, tracerName, templateTy
 	// 從模板映射中獲取模板文件路徑
 	templateFile, ok := templateMap[templateType]
 	if !ok {
-		return fmt.Errorf("Unsupported template type: %s. Supported types: %v", templateType, getSupportedTemplates())
+		return fmt.Errorf("unsupported template type: %s. Supported types: %v", templateType, getSupportedTemplates())
 	}
 
 	// 解析接口文件
