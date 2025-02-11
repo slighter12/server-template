@@ -110,11 +110,11 @@ func generate(source, output, interfaceName, packageName, tracerName, templateTy
 	// 解析接口文件
 	methods, imports, err := parseInterfaceMethods(source, interfaceName)
 	if err != nil {
-		return fmt.Errorf("Failed to parse interface: %v", err)
+		return errors.Wrap(err, "failed to parse interface")
 	}
 
 	// 構造模板數據
-	data := TemplateData{
+	data := &TemplateData{
 		PackageName:   packageName,
 		ProxyName:     interfaceName + "Proxy",
 		InterfaceName: interfaceName,
@@ -126,7 +126,7 @@ func generate(source, output, interfaceName, packageName, tracerName, templateTy
 	// 生成代碼
 	err = generateCode(templateFile, output, data)
 	if err != nil {
-		return fmt.Errorf("Failed to generate code: %v", err)
+		return errors.Wrap(err, "failed to generate code")
 	}
 
 	fmt.Printf("Proxy for interface '%s' generated at '%s' using template '%s'\n", interfaceName, output, templateType)
@@ -156,15 +156,19 @@ func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, []string
 		return nil, nil, errors.Wrap(err, "failed to get absolute source path")
 	}
 
-	// 比較源文件和輸出文件的路徑
 	sourcePath := filepath.Dir(absSourcePath)
 
 	// 從源文件路徑中提取包路徑
-	// 假設項目結構是 server-template/internal/...
-	idx := strings.Index(sourcePath, "internal")
-	if idx != -1 {
-		packagePath := sourcePath[idx:]
-		importPath := fmt.Sprintf(`"server-template/%s"`, packagePath)
+	// 先獲取模組名稱
+	moduleName, err := getModuleName()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get module name")
+	}
+
+	moduleIdx := strings.Index(sourcePath, moduleName)
+	if moduleIdx != -1 {
+		packagePath := sourcePath[moduleIdx:]
+		importPath := `"` + packagePath + `"`
 		imports = append(imports, importPath)
 	}
 
@@ -258,7 +262,7 @@ func formatResults(fields *ast.FieldList) ([]string, bool) {
 		return nil, false
 	}
 
-	var results []string
+	results := make([]string, 0, len(fields.List))
 	hasError := false
 
 	for _, f := range fields.List {
@@ -291,19 +295,19 @@ func formatType(expr ast.Expr) string {
 	}
 }
 
-func generateCode(templatePath, outputFile string, data TemplateData) error {
+func generateCode(templatePath, outputFile string, data *TemplateData) error {
 	funcMap := template.FuncMap{
 		"sub": func(a, b int) int { return a - b },
 	}
 
 	tmpl, err := template.New("proxy").Funcs(funcMap).Parse(templatePath)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to parse template")
 	}
 
 	file, err := os.Create(outputFile)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create output file")
 	}
 	defer file.Close()
 
@@ -317,4 +321,22 @@ func getSupportedTemplates() []string {
 	}
 
 	return keys
+}
+
+// 新增函數來獲取 go.mod 中的模組名稱
+func getModuleName() (string, error) {
+	modBytes, err := os.ReadFile("go.mod")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read go.mod")
+	}
+
+	modContent := string(modBytes)
+	lines := strings.Split(modContent, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
+		}
+	}
+
+	return "", errors.New("module declaration not found in go.mod")
 }
