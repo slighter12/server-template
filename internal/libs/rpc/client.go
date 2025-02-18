@@ -27,9 +27,9 @@ type RPCClients struct {
 
 type rpcClientsParams struct {
 	fx.In
+	fx.Lifecycle
 
-	Lifecycle fx.Lifecycle
-	Config    *config.Config
+	Config *config.Config
 }
 
 func NewRPCClients(params rpcClientsParams) (*RPCClients, error) {

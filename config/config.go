@@ -59,8 +59,8 @@ type Config struct {
 	RPC struct {
 		Clients map[string]RPCClientConfig `mapstructure:"clients" json:"clients" yaml:"clients"`
 		Server  struct {
-			Target string `mapstructure:"target" json:"target" yaml:"target"`
-		} `mapstructure:"server" json:"server" yaml:"server"`
+			Target string `json:"target" yaml:"target"`
+		} `json:"server" yaml:"server"`
 	} `mapstructure:"rpc" json:"rpc" yaml:"rpc"`
 }
 
