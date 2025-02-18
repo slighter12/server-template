@@ -108,3 +108,4 @@ linters-settings:
     ignore-decls:
       - lc fx.Lifecycle
       - ok bool
+      - c echo.Context

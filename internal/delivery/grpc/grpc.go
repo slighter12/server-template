@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 	"net"
 
 	"server-template/config"
@@ -18,20 +19,22 @@ import (
 )
 
 type grpcServer struct {
-	fx.In
+	fx.Lifecycle
+
 	authpb.UnimplementedAuthServer
 	auth usecase.AuthUseCase
 	cfg  *config.Config
 }
 
-func NewGRPC(auth usecase.AuthUseCase, cfg *config.Config) delivery.Delivery {
+func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config) delivery.Delivery {
 	return &grpcServer{
-		auth: auth,
-		cfg:  cfg,
+		Lifecycle: lc,
+		auth:      auth,
+		cfg:       cfg,
 	}
 }
 
-func (s *grpcServer) Serve(lc fx.Lifecycle, ctx context.Context) {
+func (s *grpcServer) Serve(ctx context.Context) error {
 	var opts []grpc.ServerOption
 	if s.cfg.Observability.Otel.Enable {
 		opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
@@ -39,21 +42,25 @@ func (s *grpcServer) Serve(lc fx.Lifecycle, ctx context.Context) {
 	grpcServer := grpc.NewServer(opts...)
 	registerAuthService(grpcServer, s)
 
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			lis, err := net.Listen("tcp", s.cfg.RPC.Server.Target)
-			if err != nil {
-				return errors.Wrap(err, "net.Listen")
-			}
+	lis, err := net.Listen("tcp", s.cfg.RPC.Server.Target)
+	if err != nil {
+		slog.Error("Failed to listen", slog.Any("error", err))
+	}
 
-			return grpcServer.Serve(lis)
-		},
+	s.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			grpcServer.GracefulStop()
 
 			return nil
 		},
 	})
+
+	slog.Info("Starting gRPC server", slog.Any("target", s.cfg.RPC.Server.Target))
+	if err := grpcServer.Serve(lis); err != nil {
+		return errors.Wrap(err, "failed to serve gRPC")
+	}
+
+	return nil
 }
 
 func registerAuthService(grpcServer *grpc.Server, s *grpcServer) {

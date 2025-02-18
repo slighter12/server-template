@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"os"
 
 	"server-template/config"
 	"server-template/internal/delivery/grpc"
@@ -24,6 +25,13 @@ import (
 	"gorm.io/gorm"
 )
 
+type startServerParams struct {
+	fx.In
+	fx.Lifecycle
+
+	Deliveries []delivery.Delivery `group:"deliveries"`
+}
+
 func main() {
 	fx.New(
 		injectInfra(),
@@ -35,10 +43,7 @@ func main() {
 			observability.NewPyroscope,
 			observability.NewTracer,
 			observability.NewCloudProfiler,
-			fx.Annotate(
-				startServer,
-				fx.ParamTags(``, ``, `group:"deliveries"`),
-			),
+			startServer,
 		),
 	).Run()
 }
@@ -71,7 +76,7 @@ func injectConn() fx.Option {
 			},
 			fx.Annotate(
 				func(dbMap map[string]*gorm.DB) (*gorm.DB, error) {
-					db, ok := dbMap["default"]
+					db, ok := dbMap["admin_data"]
 					if !ok {
 						return nil, errors.New("default database not found")
 					}
@@ -130,20 +135,13 @@ func injectDelivery() fx.Option {
 	)
 }
 
-func startServer(lc fx.Lifecycle, ctx context.Context, deliveries []delivery.Delivery) {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			for _, delivery := range deliveries {
-				slog.Info("Starting server...", slog.Any("delivery", delivery))
-				delivery.Serve(lc, ctx)
+func startServer(ctx context.Context, params startServerParams) {
+	for _, delivery := range params.Deliveries {
+		go func() {
+			if err := delivery.Serve(ctx); err != nil {
+				slog.Error("Failed to start server", slog.Any("error", err))
+				os.Exit(1)
 			}
-
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			slog.Info("Stopping server...")
-
-			return nil
-		},
-	})
+		}()
+	}
 }
