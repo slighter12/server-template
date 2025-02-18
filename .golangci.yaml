@@ -60,8 +60,11 @@ issues:
         - wrapcheck
         - gocognit
         - contextcheck
+    - path: internal/delivery/http/router/.*\.go
+      linters:
+        - wrapcheck
     - linters:
-        - lll
+      - lll
       source: "^//go:generate "
   exclude-dirs:
     - cmd/generator

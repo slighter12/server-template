@@ -18,56 +18,57 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type grpcServer struct {
-	fx.Lifecycle
-
+type gRPCServer struct {
 	authpb.UnimplementedAuthServer
-	auth usecase.AuthUseCase
-	cfg  *config.Config
+	auth       usecase.AuthUseCase
+	cfg        *config.Config
+	grpcServer *grpc.Server
 }
 
-func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config) delivery.Delivery {
-	return &grpcServer{
-		Lifecycle: lc,
-		auth:      auth,
-		cfg:       cfg,
-	}
-}
-
-func (s *grpcServer) Serve(ctx context.Context) error {
+func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config) (delivery.Delivery, error) {
 	var opts []grpc.ServerOption
-	if s.cfg.Observability.Otel.Enable {
+	if cfg.Observability.Otel.Enable {
 		opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	}
 	grpcServer := grpc.NewServer(opts...)
-	registerAuthService(grpcServer, s)
 
-	lis, err := net.Listen("tcp", s.cfg.RPC.Server.Target)
-	if err != nil {
-		slog.Error("Failed to listen", slog.Any("error", err))
+	server := &gRPCServer{
+		auth:       auth,
+		cfg:        cfg,
+		grpcServer: grpcServer,
 	}
 
-	s.Append(fx.Hook{
+	authpb.RegisterAuthServer(grpcServer, server)
+
+	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
+			slog.Info("Stopping gRPC server")
 			grpcServer.GracefulStop()
 
 			return nil
 		},
 	})
 
+	return server, nil
+}
+
+func (s *gRPCServer) Serve(ctx context.Context) error {
+	lis, err := net.Listen("tcp", s.cfg.RPC.Server.Target)
+	if err != nil {
+		slog.Error("Failed to listen", slog.Any("error", err))
+
+		return errors.Wrap(err, "failed to listen")
+	}
+
 	slog.Info("Starting gRPC server", slog.Any("target", s.cfg.RPC.Server.Target))
-	if err := grpcServer.Serve(lis); err != nil {
+	if err := s.grpcServer.Serve(lis); err != nil {
 		return errors.Wrap(err, "failed to serve gRPC")
 	}
 
 	return nil
 }
 
-func registerAuthService(grpcServer *grpc.Server, s *grpcServer) {
-	authpb.RegisterAuthServer(grpcServer, s)
-}
-
-func (s *grpcServer) Register(ctx context.Context, in *authpb.RegisterRequest) (*authpb.RegisterResponse, error) {
+func (s *gRPCServer) Register(ctx context.Context, in *authpb.RegisterRequest) (*authpb.RegisterResponse, error) {
 	user, err := s.auth.Register(ctx, in.GetEmail(), in.GetPassword())
 	if err != nil {
 		return nil, errors.Wrap(err, "auth.Register")

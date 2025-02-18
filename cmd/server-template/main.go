@@ -7,7 +7,8 @@ import (
 
 	"server-template/config"
 	"server-template/internal/delivery/grpc"
-	"server-template/internal/delivery/http"
+	"server-template/internal/delivery/http/http2"
+	"server-template/internal/delivery/http/http3"
 	"server-template/internal/domain/delivery"
 	repo "server-template/internal/domain/repository"
 	use "server-template/internal/domain/usecase"
@@ -124,7 +125,11 @@ func injectDelivery() fx.Option {
 	return fx.Options(
 		fx.Provide(
 			fx.Annotate(
-				http.NewHTTP,
+				http2.NewHTTP2,
+				fx.ResultTags(`group:"deliveries"`),
+			),
+			fx.Annotate(
+				http3.NewHTTP3,
 				fx.ResultTags(`group:"deliveries"`),
 			),
 			fx.Annotate(
