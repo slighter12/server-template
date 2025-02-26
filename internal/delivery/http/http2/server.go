@@ -13,11 +13,21 @@ import (
 	"server-template/internal/delivery/http/router"
 	"server-template/internal/domain/delivery"
 	"server-template/internal/domain/lifecycle"
+	"server-template/internal/domain/usecase"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"go.uber.org/fx"
 )
+
+type HTTP2Params struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Config    *config.Config
+	Logger    *slog.Logger
+	AuthUC    usecase.AuthHTTPUseCase
+}
 
 type http2Server struct {
 	cfg    *config.Config
@@ -25,9 +35,14 @@ type http2Server struct {
 	server *http.Server
 }
 
-func NewHTTP2(lc fx.Lifecycle, cfg *config.Config, logger *slog.Logger) (delivery.Delivery, error) {
+func NewHTTP2(params HTTP2Params) (delivery.Delivery, error) {
 	echoServer := echo.New()
-	router.RegisterRoutes(echoServer, cfg, logger)
+	router.RegisterRoutes(router.RouterParams{
+		Router: echoServer,
+		Config: params.Config,
+		Logger: params.Logger,
+		AuthUC: params.AuthUC,
+	})
 
 	certificates, err := common.GenerateTLSConfig()
 	if err != nil {
@@ -35,7 +50,7 @@ func NewHTTP2(lc fx.Lifecycle, cfg *config.Config, logger *slog.Logger) (deliver
 	}
 
 	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
+		Addr:              fmt.Sprintf(":%d", params.Config.HTTP.Port),
 		Handler:           echoServer,
 		ReadHeaderTimeout: 20 * time.Second,
 		TLSConfig: &tls.Config{
@@ -46,12 +61,12 @@ func NewHTTP2(lc fx.Lifecycle, cfg *config.Config, logger *slog.Logger) (deliver
 	}
 
 	delivery := &http2Server{
-		cfg:    cfg,
-		logger: logger,
+		cfg:    params.Config,
+		logger: params.Logger,
 		server: server,
 	}
 
-	lc.Append(fx.Hook{
+	params.Lifecycle.Append(fx.Hook{
 		OnStop: delivery.stop,
 	})
 

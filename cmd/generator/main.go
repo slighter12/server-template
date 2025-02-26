@@ -41,16 +41,18 @@ type TemplateData struct {
 	TracerName    string
 	Methods       []Method
 	Imports       []string
+	ModuleName    string
 }
 
 type GeneratorConfig struct {
 	Generators []struct {
-		Source    string `yaml:"source"`
-		Output    string `yaml:"output"`
-		Interface string `yaml:"interface"`
-		Package   string `yaml:"package"`
-		Tracer    string `yaml:"tracer"`
-		Template  string `yaml:"template"`
+		Source     string `yaml:"source"`
+		Output     string `yaml:"output"`
+		Interface  string `yaml:"interface"`
+		Package    string `yaml:"package"`
+		Tracer     string `yaml:"tracer"`
+		Template   string `yaml:"template"`
+		ModuleName string `yaml:"moduleName"`
 	} `yaml:"generators"`
 }
 
@@ -64,6 +66,7 @@ func main() {
 	packageName := pflag.String("package", "", "Package name for the generated proxy")
 	tracerName := pflag.String("tracer", "", "Tracer name for the generated proxy")
 	templateType := pflag.String("template", "", "Template type (e.g., otel ...)")
+	moduleName := pflag.String("module-name", "", "Module name for import paths")
 
 	pflag.Parse()
 
@@ -81,7 +84,7 @@ func main() {
 
 		// 處理每個生成任務
 		for _, gen := range config.Generators {
-			if err := generate(gen.Source, gen.Output, gen.Interface, gen.Package, gen.Tracer, gen.Template); err != nil {
+			if err := generate(gen.Source, gen.Output, gen.Interface, gen.Package, gen.Tracer, gen.Template, gen.ModuleName); err != nil {
 				log.Fatalf("Error generating proxy: %v", err)
 			}
 		}
@@ -90,15 +93,15 @@ func main() {
 	}
 
 	// 使用命令列參數的情況
-	if err := generate(*sourceFile, *outputFile, *interfaceName, *packageName, *tracerName, *templateType); err != nil {
+	if err := generate(*sourceFile, *outputFile, *interfaceName, *packageName, *tracerName, *templateType, *moduleName); err != nil {
 		log.Fatalf("Error generating proxy: %v", err)
 	}
 }
 
-func generate(source, output, interfaceName, packageName, tracerName, templateType string) error {
+func generate(source, output, interfaceName, packageName, tracerName, templateType, moduleName string) error {
 	// 校驗參數
-	if source == "" || interfaceName == "" || templateType == "" {
-		return fmt.Errorf("source, interface, and template must be specified")
+	if source == "" || interfaceName == "" || templateType == "" || moduleName == "" {
+		return fmt.Errorf("source, interface, template and module-name must be specified")
 	}
 
 	// 從模板映射中獲取模板文件路徑
@@ -108,7 +111,7 @@ func generate(source, output, interfaceName, packageName, tracerName, templateTy
 	}
 
 	// 解析接口文件
-	methods, imports, err := parseInterfaceMethods(source, interfaceName)
+	methods, imports, err := parseInterfaceMethods(source, interfaceName, moduleName)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse interface")
 	}
@@ -121,6 +124,7 @@ func generate(source, output, interfaceName, packageName, tracerName, templateTy
 		TracerName:    tracerName,
 		Methods:       methods,
 		Imports:       imports,
+		ModuleName:    moduleName,
 	}
 
 	// 生成代碼
@@ -134,14 +138,14 @@ func generate(source, output, interfaceName, packageName, tracerName, templateTy
 	return nil
 }
 
-func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, []string, error) {
+func parseInterfaceMethods(sourceFile, interfaceName, moduleName string) ([]Method, []string, error) {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, sourceFile, nil, parser.AllErrors)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to parse interface")
 	}
 
-	imports, err := collectImports(node, sourceFile)
+	imports, err := collectImports(node, sourceFile, moduleName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -151,7 +155,7 @@ func parseInterfaceMethods(sourceFile, interfaceName string) ([]Method, []string
 	return methods, imports, nil
 }
 
-func collectImports(node *ast.File, sourceFile string) ([]string, error) {
+func collectImports(node *ast.File, sourceFile string, moduleName string) ([]string, error) {
 	imports := []string{}
 
 	workDir, err := os.Getwd()
@@ -165,11 +169,6 @@ func collectImports(node *ast.File, sourceFile string) ([]string, error) {
 	}
 
 	sourcePath := filepath.Dir(absSourcePath)
-
-	moduleName, err := getModuleName()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get module name")
-	}
 
 	moduleIdx := strings.Index(sourcePath, moduleName)
 	if moduleIdx != -1 {
@@ -326,22 +325,4 @@ func getSupportedTemplates() []string {
 	}
 
 	return keys
-}
-
-// 新增函數來獲取 go.mod 中的模組名稱
-func getModuleName() (string, error) {
-	modBytes, err := os.ReadFile("go.mod")
-	if err != nil {
-		return "", errors.Wrap(err, "failed to read go.mod")
-	}
-
-	modContent := string(modBytes)
-	lines := strings.Split(modContent, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
-		}
-	}
-
-	return "", errors.New("module declaration not found in go.mod")
 }

@@ -146,6 +146,7 @@ func injectUse() fx.Option {
 	return fx.Options(
 		fx.Provide(
 			usecase.NewAuthUseCase,
+			usecase.NewAuthHTTPUseCase,
 		),
 		fx.Decorate(func(cfg *config.Config, base use.AuthUseCase) use.AuthUseCase {
 			return usecase.ProvideAuthUseCaseProxy(cfg.Observability.Otel.Enable, base)

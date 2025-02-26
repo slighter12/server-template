@@ -77,3 +77,12 @@ func (uc *authUseCase) Login(ctx context.Context, email, hashedPassword string) 
 
 	return user, nil
 }
+
+func (uc *authUseCase) GetUserByID(ctx context.Context, userID string) (*entity.User, error) {
+	user, err := uc.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to find user by ID")
+	}
+
+	return user, nil
+}

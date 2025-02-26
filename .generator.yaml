@@ -5,6 +5,7 @@ generators:
     package: repository
     tracer: user-repo-tracer
     template: otel
+    moduleName: server-template
   
   - source: ./internal/domain/usecase/auth.go
     output: ./internal/usecase/auth.gen.go
@@ -12,3 +13,4 @@ generators:
     package: usecase
     tracer: auth-usecase-tracer
     template: otel
+    moduleName: server-template

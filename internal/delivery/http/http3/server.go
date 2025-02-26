@@ -14,6 +14,7 @@ import (
 	"server-template/internal/delivery/http/router"
 	"server-template/internal/domain/delivery"
 	"server-template/internal/domain/lifecycle"
+	"server-template/internal/domain/usecase"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -22,15 +23,29 @@ import (
 	"go.uber.org/fx"
 )
 
+type HTTP3Params struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Config    *config.Config
+	Logger    *slog.Logger
+	AuthUC    usecase.AuthHTTPUseCase
+}
+
 type http3Server struct {
 	cfg    *config.Config
 	logger *slog.Logger
 	server *http3.Server
 }
 
-func NewHTTP3(lc fx.Lifecycle, cfg *config.Config, logger *slog.Logger) (delivery.Delivery, error) {
+func NewHTTP3(params HTTP3Params) (delivery.Delivery, error) {
 	echoServer := echo.New()
-	router.RegisterRoutes(echoServer, cfg, logger)
+	router.RegisterRoutes(router.RouterParams{
+		Router: echoServer,
+		Config: params.Config,
+		Logger: params.Logger,
+		AuthUC: params.AuthUC,
+	})
 
 	certificates, err := common.GenerateTLSConfig()
 	if err != nil {
@@ -38,7 +53,7 @@ func NewHTTP3(lc fx.Lifecycle, cfg *config.Config, logger *slog.Logger) (deliver
 	}
 
 	server := &http3.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.HTTP.Port),
+		Addr:    fmt.Sprintf(":%d", params.Config.HTTP.Port),
 		Handler: echoServer,
 		TLSConfig: &tls.Config{
 			Certificates: certificates,
@@ -57,12 +72,12 @@ func NewHTTP3(lc fx.Lifecycle, cfg *config.Config, logger *slog.Logger) (deliver
 	}
 
 	delivery := &http3Server{
-		cfg:    cfg,
-		logger: logger,
+		cfg:    params.Config,
+		logger: params.Logger,
 		server: server,
 	}
 
-	lc.Append(fx.Hook{
+	params.Lifecycle.Append(fx.Hook{
 		OnStop: delivery.stop,
 	})
 

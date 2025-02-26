@@ -57,3 +57,17 @@ func (p *UserRepositoryProxy) FindByEmail(ctx context.Context, email string) (*e
 
 	return ret0, err
 }
+
+func (p *UserRepositoryProxy) FindByID(ctx context.Context, id string) (*entity.User, error) {
+	tracer := otel.Tracer("user-repo-tracer")
+	ctx, span := tracer.Start(ctx, "FindByID")
+	defer span.End()
+
+	ret0, err := p.UserRepository.FindByID(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+
+	return ret0, err
+}

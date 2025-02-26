@@ -33,3 +33,13 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*entity
 
 	return &user, nil
 }
+
+func (r *userRepository) FindByID(ctx context.Context, id string) (*entity.User, error) {
+	var user entity.User
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}

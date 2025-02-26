@@ -6,19 +6,64 @@ import (
 
 	"server-template/config"
 	"server-template/internal/delivery/http/middleware"
+	"server-template/internal/delivery/http/router/handler"
+	"server-template/internal/delivery/http/validator"
+	"server-template/internal/domain/usecase"
 
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
 	slogecho "github.com/samber/slog-echo"
 )
 
-func RegisterRoutes(router *echo.Echo, cfg *config.Config, logger *slog.Logger) {
-	router.Use(middleware.AltSvc(cfg.HTTP.Port))
-	router.Use(slogecho.New(logger))
-	router.Use(echomiddleware.Recover())
+// 也可以為 RegisterRoutes 創建一個 params 結構
+type RouterParams struct {
+	Router *echo.Echo
+	Config *config.Config
+	Logger *slog.Logger
+	AuthUC usecase.AuthHTTPUseCase
+}
 
-	router.GET("/ping", handlePing)
-	router.GET("/protocol", handleProtocol)
+func RegisterRoutes(params RouterParams) {
+	// 設置驗證器
+	params.Router.Validator = validator.New()
+
+	// 中間件
+	params.Router.Use(middleware.AltSvc(params.Config.HTTP.Port))
+	params.Router.Use(slogecho.New(params.Logger))
+	params.Router.Use(echomiddleware.Recover())
+	params.Router.Use(echomiddleware.CORS())
+
+	// 基本路由
+	params.Router.GET("/ping", handlePing)
+	params.Router.GET("/protocol", handleProtocol)
+
+	// 創建處理程序
+	authHandler := handler.NewAuthHandler(params.AuthUC, params.Logger)
+
+	// 公開路由
+	auth := params.Router.Group("/auth")
+	auth.POST("/register", authHandler.Register)
+	auth.POST("/login", authHandler.Login)
+	auth.POST("/logout", authHandler.Logout)
+
+	// 受保護的路由
+	jwtConfig := middleware.JWTConfig{
+		AuthRPC: params.AuthUC,
+		Logger:  params.Logger,
+	}
+	api := params.Router.Group("/api")
+	api.Use(middleware.JWT(jwtConfig))
+
+	// 示例受保護的路由
+	api.GET("/profile", func(c echo.Context) error {
+		userID := c.Get("user_id").(string)
+		email := c.Get("email").(string)
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"user_id": userID,
+			"email":   email,
+		})
+	})
 }
 
 func handlePing(c echo.Context) error {

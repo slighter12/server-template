@@ -11,6 +11,10 @@ option features.(pb.go).api_level = API_OPAQUE;
 // Auth service definition
 service Auth {
   rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc GenerateToken(GenerateTokenRequest) returns (GenerateTokenResponse);
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
 }
 
 message RegisterRequest {
@@ -19,6 +23,44 @@ message RegisterRequest {
 }
 
 message RegisterResponse {
+  Status status = 1;
+  User user = 2;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  Status status = 1;
+  User user = 2;
+  string token = 3;
+}
+
+message LogoutRequest {
+  string token = 1;
+}
+
+message LogoutResponse {
+  Status status = 1;
+}
+
+message GenerateTokenRequest {
+  string user_id = 1;
+  string email = 2;
+}
+
+message GenerateTokenResponse {
+  Status status = 1;
+  string token = 2;
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
   Status status = 1;
   User user = 2;
 }

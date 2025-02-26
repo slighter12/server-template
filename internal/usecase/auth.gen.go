@@ -57,3 +57,17 @@ func (p *AuthUseCaseProxy) Login(ctx context.Context, email string, hashedPasswo
 
 	return ret0, err
 }
+
+func (p *AuthUseCaseProxy) GetUserByID(ctx context.Context, userID string) (*entity.User, error) {
+	tracer := otel.Tracer("auth-usecase-tracer")
+	ctx, span := tracer.Start(ctx, "GetUserByID")
+	defer span.End()
+
+	ret0, err := p.AuthUseCase.GetUserByID(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+
+	return ret0, err
+}

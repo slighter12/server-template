@@ -1,4 +1,8 @@
-.PHONY: help test-race lint sec-scan gci-format db-mysql-init build docker-image-build db-mysql-down db-mysql-up db-mysql-seeders-init gen-migrate-sql proto.gen
+.PHONY: help test-race lint sec-scan gci-format \
+	db-mysql-init db-mysql-seeders-init db-postgres-init db-postgres-seeders-init \
+	build docker-image-build \
+	db-mysql-down db-mysql-up db-postgres-down db-postgres-up gen-migrate-sql \
+	proto.gen proxy.gen
 
 help: ## show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -39,53 +43,119 @@ vuln-scan: ## scan for vulnerability issues with govulncheck (govulncheck binary
 # db #
 ######
 MYSQL_SQL_PATH := ./database/migrations/mysql
-MYSQL_SEEDERS_SQL_PATH := ./database/migrations/seeders
+MYSQL_SEEDERS_SQL_PATH := ./database/migrations/mysql/seeders
+POSTGRES_SQL_PATH := ./database/migrations/postgres
+POSTGRES_SEEDERS_SQL_PATH := ./database/migrations/postgres/seeders
 
-# Automatically create migration directories if they do not exist
-db-mysql-seeders-init: ## initialize new seeder
-	@mkdir -p ${MYSQL_SEEDERS_SQL_PATH}
-	@( \
-	printf "Enter seeder name: "; read -r SEEDER_NAME && \
-	touch ${MYSQL_SEEDERS_SQL_PATH}/$(SQL_FILE_TIMESTAMP)_$${SEEDER_NAME}.up.sql && \
-	touch ${MYSQL_SEEDERS_SQL_PATH}/$(SQL_FILE_TIMESTAMP)_$${SEEDER_NAME}.down.sql \
-	)
+# -----------------------------------------------------------------------------
+# MySQL
+# -----------------------------------------------------------------------------
 
-db-mysql-init: ## initialize new migration
+db-mysql-init: ## initialize new MySQL migration
 	@mkdir -p ${MYSQL_SQL_PATH}
 	@( \
-	printf "Enter migrate name: "; read -r MIGRATE_NAME && \
-	migrate create -ext sql -dir ${MYSQL_SQL_PATH} $${MIGRATE_NAME} \
+		printf "Enter migrate name: "; read -r MIGRATE_NAME && \
+		migrate create -ext sql -dir ${MYSQL_SQL_PATH} $${MIGRATE_NAME} \
 	)
 
-db-mysql-up: ## apply all migrations, including seeders
+db-mysql-seeders-init: ## initialize new MySQL seeder
+	@mkdir -p ${MYSQL_SEEDERS_SQL_PATH}
 	@( \
-	printf "Enter pass for db: "; read -rs DB_PASSWORD && \
-	printf "Enter port(3306...): "; read -r DB_PORT &&\
-	migrate --database "mysql://root:$${DB_PASSWORD}@tcp(localhost:$${DB_PORT})/$(PROJECT_NAME)?charset=utf8&parseTime=True&loc=Local" --path ${MYSQL_SQL_PATH} up && \
-	migrate --database "mysql://root:$${DB_PASSWORD}@tcp(localhost:$${DB_PORT})/$(PROJECT_NAME)?charset=utf8&parseTime=True&loc=Local" --path ${MYSQL_SEEDERS_SQL_PATH} up \
+		printf "Enter seeder name: "; read -r SEEDER_NAME && \
+		touch ${MYSQL_SEEDERS_SQL_PATH}/$(SQL_FILE_TIMESTAMP)_$${SEEDER_NAME}.up.sql && \
+		touch ${MYSQL_SEEDERS_SQL_PATH}/$(SQL_FILE_TIMESTAMP)_$${SEEDER_NAME}.down.sql \
 	)
 
-db-mysql-down: ## revert all migrations, including seeders
+define migrate_command
+	DB_PORT_VALUE=${DB_PORT:-3306}
+	migrate --database "mysql://root:$(DB_PASSWORD)@tcp(localhost:$${DB_PORT_VALUE})/$(PROJECT_NAME)?charset=utf8&parseTime=True&loc=Local" --path $(1) $(2)
+endef
+
+db-mysql-up: ## apply all MySQL migrations, including seeders
 	@( \
-	printf "Enter pass for db: "; read -rs DB_PASSWORD && \
-	printf "Enter port(3306...): "; read -r DB_PORT &&\
-	migrate --database "mysql://root:$${DB_PASSWORD}@tcp(localhost:$${DB_PORT})/$(PROJECT_NAME)?charset=utf8&parseTime=True&loc=Local" --path ${MYSQL_SEEDERS_SQL_PATH} down && \
-	migrate --database "mysql://root:$${DB_PASSWORD}@tcp(localhost:$${DB_PORT})/$(PROJECT_NAME)?charset=utf8&parseTime=True&loc=Local" --path ${MYSQL_SQL_PATH} down \
+		printf "Enter pass for db: "; read -rs DB_PASSWORD && \
+		export DB_PASSWORD=$${DB_PASSWORD} && \
+		printf "Enter port(3306...): "; read -r DB_PORT && \
+		export DB_PORT=$${DB_PORT} && \
+		$(call migrate_command,${MYSQL_SQL_PATH},up) && \
+		$(call migrate_command,${MYSQL_SEEDERS_SQL_PATH},up) \
 	)
+
+db-mysql-down: ## revert all MySQL migrations, including seeders
+	@( \
+		printf "Enter pass for db: "; read -rs DB_PASSWORD && \
+		export DB_PASSWORD=$${DB_PASSWORD} && \
+		printf "Enter port(3306...): "; read -r DB_PORT && \
+		export DB_PORT=$${DB_PORT} && \
+		$(call migrate_command,${MYSQL_SEEDERS_SQL_PATH},down) && \
+		$(call migrate_command,${MYSQL_SQL_PATH},down) \
+	)
+
+# -----------------------------------------------------------------------------
+# PostgreSQL
+# -----------------------------------------------------------------------------
+
+db-postgres-init: ## initialize new PostgreSQL migration
+	@mkdir -p ${POSTGRES_SQL_PATH}
+	goose create init sql -dir ${POSTGRES_SQL_PATH}
+
+db-postgres-seeders-init: ## initialize new PostgreSQL seeder
+	@mkdir -p ${POSTGRES_SEEDERS_SQL_PATH}
+	@( \
+		printf "Enter seeder name: "; read -r SEEDER_NAME && \
+		touch ${POSTGRES_SEEDERS_SQL_PATH}/$(SQL_FILE_TIMESTAMP)_$${SEEDER_NAME}.up.sql && \
+		touch ${POSTGRES_SEEDERS_SQL_PATH}/$(SQL_FILE_TIMESTAMP)_$${SEEDER_NAME}.down.sql \
+	)
+
+db-postgres-create: ## create new PostgreSQL migration
+	@mkdir -p ${POSTGRES_SQL_PATH}
+	@( \
+		printf "Enter migration name: "; read -r MIGRATE_NAME && \
+		goose create $${MIGRATE_NAME} sql -dir ${POSTGRES_SQL_PATH} \
+	)
+
+define goose_migrate_command
+	PG_URI="postgres://postgres:$(PG_PASSWORD)@localhost:$(PG_PORT)/$(PROJECT_NAME)?sslmode=disable"
+	goose -dir ${POSTGRES_SQL_PATH} $(1) $${PG_URI}
+endef
+
+db-postgres-up: ## apply all PostgreSQL migrations
+	@( \
+		printf "Enter pass for db: "; read -rs PG_PASSWORD && \
+		export PG_PASSWORD=$${PG_PASSWORD} && \
+		printf "Enter port(5432...): "; read -r PG_PORT && \
+		export PG_PORT=$${PG_PORT} && \
+		$(call goose_migrate_command,up) \
+	)
+
+db-postgres-down: ## revert all PostgreSQL migrations
+	@( \
+		printf "Enter pass for db: "; read -rs PG_PASSWORD && \
+		export PG_PASSWORD=$${PG_PASSWORD} && \
+		printf "Enter port(5432...): "; read -r PG_PORT && \
+		export PG_PORT=$${PG_PORT} && \
+		$(call goose_migrate_command,down) \
+	)
+
+# -----------------------------------------------------------------------------
+# General
+# -----------------------------------------------------------------------------
 
 gen-migrate-sql: ## generate migration SQL files
 	@mkdir -p ${MYSQL_SQL_PATH}
 	@( \
-	printf "Enter file name: "; read -r FILE_NAME; \
-	touch ${MYSQL_SQL_PATH}/$(SQL_FILE_TIMESTAMP)_$$FILE_NAME.up.sql; \
-	touch ${MYSQL_SQL_PATH}/$(SQL_FILE_TIMESTAMP)_$$FILE_NAME.down.sql; \
+		printf "Enter migration name: "; read -r MIGRATE_NAME && \
+		migrate create -ext sql -dir ${MYSQL_SQL_PATH} $${MIGRATE_NAME} \
 	)
 
 ###########
 #   GCI   #
 ###########
+
+GCI_DOMAIN_PREFIX ?=
+
 gci-format: ## format imports
-	gci write --skip-generated -s standard -s default -s "prefix(yt.com/backend)" -s "prefix($(PROJECT_NAME))" ./
+	gci write --skip-generated -s standard -s default $$(if $(GCI_DOMAIN_PREFIX),-s "prefix($${GCI_DOMAIN_PREFIX})",) -s "prefix($(PROJECT_NAME))" ./
 
 #########
 # build #
@@ -93,8 +163,8 @@ gci-format: ## format imports
 
 build: ## build the project
 	@( \
-	printf "Enter version: "; read -r VERSION; \
-	go build -ldflags "-s -w -X 'main.Version=$$VERSION' -X 'main.Built=$(Date)' -X 'main.GitCommit=$(GitCommit)'" -o ./bin/$(PROJECT_NAME) ./cmd/$(PROJECT_NAME) \
+		printf "Enter version: "; read -r VERSION; \
+		go build -ldflags "-s -w -X 'main.Version=$$VERSION' -X 'main.Built=$(Date)' -X 'main.GitCommit=$(GitCommit)'" -o ./bin/$(PROJECT_NAME) ./cmd/$(PROJECT_NAME) \
 	)
 
 docker-image-build: ## build Docker image
@@ -103,14 +173,13 @@ docker-image-build: ## build Docker image
 		--platform $(DOCKER_PLATFORM) \
 		--build-arg BUILT=$(Date) \
 		--build-arg GIT_COMMIT=$(GitCommit) \
-		--ssh default=$$HOME/.ssh/id_rsa \
 		./
 
 DOCKER_PLATFORM ?= linux/amd64
 
 proto.gen: ## generate protobuf code
 	protoc --proto_path=proto/pb \
-		--proto_path=${GOPATH}/pkg/mod/google.golang.org/protobuf@v1.36.2/src \
+		--proto_path=$$(go env GOPATH)/pkg/mod/google.golang.org/protobuf@v1.36.2/src \
 		--go_out=proto/pb/authpb \
 		--go_opt=paths=source_relative \
 		--go-grpc_out=proto/pb/authpb \
@@ -119,7 +188,5 @@ proto.gen: ## generate protobuf code
 		--experimental_allow_proto3_optional \
 		proto/pb/auth.proto
 
-gen-proxy: ## generate proxy code
-	go build -o generator cmd/generator/main.go
-	./generator --config=.generator.yaml
-	rm generator
+proxy.gen: ## generate proxy code
+	go run cmd/generator/main.go --config=.generator.yaml

@@ -64,6 +64,10 @@ type Config struct {
 			Target string `json:"target" yaml:"target"`
 		} `json:"server" yaml:"server"`
 	} `mapstructure:"rpc" json:"rpc" yaml:"rpc"`
+
+	Auth struct {
+		JWTSecret string `json:"jwtSecret" yaml:"jwtSecret"`
+	} `json:"auth" yaml:"auth"`
 }
 
 type Log struct {
