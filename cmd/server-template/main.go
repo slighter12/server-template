@@ -16,6 +16,7 @@ import (
 	"server-template/internal/libs/mongo"
 	"server-template/internal/libs/mysql"
 	"server-template/internal/libs/observability"
+	"server-template/internal/libs/postgres"
 	"server-template/internal/libs/redis"
 	"server-template/internal/libs/rpc"
 	"server-template/internal/repository"
@@ -60,31 +61,62 @@ func injectInfra() fx.Option {
 func injectConn() fx.Option {
 	return fx.Options(
 		fx.Provide(
-			// Provide multiple MySQL connections
+			// MySQL connections
 			func(cfg *config.Config, lc fx.Lifecycle) (map[string]*gorm.DB, error) {
 				dbMap := make(map[string]*gorm.DB)
 				for name, dbCfg := range cfg.Mysql {
-					dbConn, err := mysql.New(lc, dbCfg, name)
+					dbConn, err := mysql.New(lc, dbCfg)
 					if err != nil {
 						slog.Error("Failed to create MySQL connection", slog.String("name", name), slog.Any("error", err))
 
-						return nil, errors.Wrap(err, "mysql.New") // Return the error to prevent the application from starting
+						return nil, errors.Wrap(err, "mysql.New")
 					}
 					dbMap[name] = dbConn
 				}
 
 				return dbMap, nil
 			},
+
+			// PostgreSQL connections
+			func(cfg *config.Config, lc fx.Lifecycle) (map[string]*gorm.DB, error) {
+				pgMap := make(map[string]*gorm.DB)
+				for name, dbCfg := range cfg.Postgres {
+					dbConn, err := postgres.NewWithPgx(lc, dbCfg)
+					if err != nil {
+						slog.Error("Failed to create PostgreSQL connection", slog.String("name", name), slog.Any("error", err))
+
+						return nil, errors.Wrap(err, "postgres.New")
+					}
+					pgMap[name] = dbConn
+				}
+
+				return pgMap, nil
+			},
+
+			// Default MySQL connection
 			fx.Annotate(
 				func(dbMap map[string]*gorm.DB) (*gorm.DB, error) {
-					db, ok := dbMap["admin_data"]
+					db, ok := dbMap["main"]
 					if !ok {
-						return nil, errors.New("default database not found")
+						return nil, errors.New("main MySQL database not found")
 					}
 
 					return db, nil
 				},
-				fx.ResultTags(`name:"default"`),
+				fx.ResultTags(`name:"default_mysql"`),
+			),
+
+			// Default PostgreSQL connection
+			fx.Annotate(
+				func(pgMap map[string]*gorm.DB) (*gorm.DB, error) {
+					db, ok := pgMap["main"]
+					if !ok {
+						return nil, errors.New("main PostgreSQL database not found")
+					}
+
+					return db, nil
+				},
+				fx.ResultTags(`name:"default_postgres"`),
 			),
 		),
 		fx.Provide(

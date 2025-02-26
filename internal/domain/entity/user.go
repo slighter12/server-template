@@ -3,16 +3,21 @@ package entity
 import (
 	"time"
 
+	"server-template/internal/domain/entity/user"
+
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
 )
 
+// User 代表使用者實體
 type User struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Password  string    `json:"password"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        string          `json:"id" gorm:"primaryKey"`
+	Name      string          `json:"name" gorm:"column:name"`
+	Email     string          `json:"email" gorm:"unique;not null;column:email"`
+	Password  string          `json:"password" gorm:"column:password"`
+	Status    user.UserStatus `json:"status" gorm:"column:status"` // 使用字串來表示 UserStatus
+	CreatedAt time.Time       `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt time.Time       `json:"updated_at" gorm:"column:updated_at"`
 }
 
 func (u *User) Validate() error {

@@ -36,7 +36,7 @@ func handleProtocol(c echo.Context) error {
 		proto = "HTTP/1.1"
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"protocol": proto,
 		"headers":  c.Request().Header,
 	})

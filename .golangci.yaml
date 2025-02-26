@@ -60,6 +60,7 @@ issues:
         - wrapcheck
         - gocognit
         - contextcheck
+        - varnamelen
     - path: internal/delivery/http/router/.*\.go
       linters:
         - wrapcheck

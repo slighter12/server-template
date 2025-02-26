@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"server-template/internal/libs/mysql"
+	"server-template/internal/libs/postgres"
 	"server-template/internal/libs/redis"
 
 	"github.com/pkg/errors"
@@ -53,8 +54,9 @@ type Config struct {
 		} `json:"cloudProfiler" yaml:"cloudProfiler"`
 	} `json:"observability" yaml:"observability"`
 
-	Mysql map[string]*mysql.DBConn `json:"mysql" yaml:"mysql" mapstructure:"mysql"`
-	Redis *redis.Conn              `json:"redis" yaml:"redis"`
+	Mysql    map[string]*mysql.DBConn    `json:"mysql" yaml:"mysql" mapstructure:"mysql"`
+	Postgres map[string]*postgres.DBConn `json:"postgres" yaml:"postgres" mapstructure:"postgres"`
+	Redis    *redis.Conn                 `json:"redis" yaml:"redis"`
 
 	RPC struct {
 		Clients map[string]RPCClientConfig `mapstructure:"clients" json:"clients" yaml:"clients"`
