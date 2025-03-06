@@ -1,0 +1,91 @@
+env:
+  env: local
+  serviceName: server-template
+  debug: false
+  log:
+    pretty: true
+    level: "info"
+    path: "/var/log/server-template.log"
+    maxAge: 168h
+    rotationTime: 24h
+
+http:
+  port: 4433
+  timeouts:
+    readTimeout: 30s
+    readHeaderTimeout: 10s
+    writeTimeout: 30s
+    idleTimeout: 60s
+
+observability:
+  pyroscope:
+    enable: false
+    url: ""
+  otel:
+    enable: false
+    host: "localhost"
+    port: 4317
+    isSecure: false
+    exporter: ""
+
+mysql:
+  main:
+    database: "your_main_db"
+    master:
+      host: "master.db.example.com"
+      port: "3306"
+      username: "user"
+      password: "password"
+      loc: "Local"
+      timeout: "10s"
+    replicas:
+      - host: "replica1.db.example.com"
+        port: "3306"
+        username: "readonly_user"
+        password: "password"
+        loc: "Local"
+        timeout: "10s"
+      - host: "replica2.db.example.com"
+        port: "3306"
+        username: "readonly_user"
+        password: "password"
+        loc: "Local"
+        timeout: "10s"
+    maxIdleConns: 25
+    maxOpenConns: 50
+    connMaxLifetime: "5m"
+  
+  analytics:
+    database: "analytics_db"
+    master:
+      host: "analytics.db.example.com"
+      port: "3306"
+      username: "user"
+      password: "password"
+      loc: "Local"
+      timeout: "10s"
+    maxIdleConns: 10
+    maxOpenConns: 20
+    connMaxLifetime: "5m"
+
+postgres:
+  main:
+    database: "your_main_db"
+    schema: "public"
+    searchPath: "public"
+    sslMode: "disable"
+    master:
+      host: "master.postgres.example.com"
+      port: "5432"
+      username: "user"
+      password: "password"
+      timeout: "10s"
+    replicas:
+      - host: "replica1.postgres.example.com"
+        port: "5432"
+        username: "readonly_user"
+        password: "password"
+        timeout: "10s"
+    maxIdleConns: 25
+    maxOpenConns: 50
+    connMaxLifetime: "5m"
