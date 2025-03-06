@@ -1,8 +1,0 @@
-[
-  {
-    "name": "users",
-    "hash": "60c09f9eb32de71a95ba99d3d4bd53b6",
-    "schema": "CREATE TABLE IF NOT EXISTS `users` (\n  `id` VARCHAR(255) NOT NULL,\n  `name` VARCHAR(255) NOT NULL,\n  `email` VARCHAR(255) UNIQUE NOT NULL,\n  `password` VARCHAR(255) NOT NULL,\n  `status` INTEGER NOT NULL,\n  `created_at` DATETIME NOT NULL,\n  `updated_at` DATETIME NOT NULL,\n  PRIMARY KEY (`id`)\n);",
-    "indexes": null
-  }
-]

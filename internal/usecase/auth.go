@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"time"
 
 	"server-template/internal/domain/entity"
 	"server-template/internal/domain/repository"
@@ -38,13 +37,10 @@ func (uc *authUseCase) Register(ctx context.Context, email, hashedPassword strin
 	}
 
 	// 創建新用戶
-	now := time.Now()
 	user := &entity.User{
-		ID:        uuid.New().String(),
-		Email:     email,
-		Password:  hashedPassword,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:       uuid.New().String(),
+		Email:    email,
+		Password: hashedPassword,
 	}
 
 	// 驗證用戶資料

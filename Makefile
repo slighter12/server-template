@@ -115,26 +115,28 @@ db-postgres-create: ## create new PostgreSQL migration
 	)
 
 define goose_migrate_command
-	PG_URI="postgres://postgres:$(PG_PASSWORD)@localhost:$(PG_PORT)/$(PROJECT_NAME)?sslmode=disable"
-	goose -dir ${POSTGRES_SQL_PATH} $(1) $${PG_URI}
+	PG_URI="postgres://postgres:$(PG_PASSWORD)@localhost:$(PG_PORT)/$(DB_NAME)?sslmode=disable"
+	goose postgres -dir $(1) $(2) $${PG_URI}
 endef
 
 db-postgres-up: ## apply all PostgreSQL migrations
 	@( \
+		printf "Enter database name: "; read -r DB_NAME && \
 		printf "Enter pass for db: "; read -rs PG_PASSWORD && \
-		export PG_PASSWORD=$${PG_PASSWORD} && \
 		printf "Enter port(5432...): "; read -r PG_PORT && \
-		export PG_PORT=$${PG_PORT} && \
-		$(call goose_migrate_command,up) \
+		PG_PORT=$${PG_PORT:-5432} && \
+		PG_URI="postgres://root:$${PG_PASSWORD}@localhost:$${PG_PORT}/$${DB_NAME}?sslmode=disable" && \
+		goose postgres "$${PG_URI}" -dir ${POSTGRES_SQL_PATH} up \
 	)
 
 db-postgres-down: ## revert all PostgreSQL migrations
 	@( \
+		printf "Enter database name: "; read -r DB_NAME && \
 		printf "Enter pass for db: "; read -rs PG_PASSWORD && \
-		export PG_PASSWORD=$${PG_PASSWORD} && \
 		printf "Enter port(5432...): "; read -r PG_PORT && \
-		export PG_PORT=$${PG_PORT} && \
-		$(call goose_migrate_command,down) \
+		PG_PORT=$${PG_PORT:-5432} && \
+		PG_URI="postgres://root:$${PG_PASSWORD}@localhost:$${PG_PORT}/$${DB_NAME}?sslmode=disable" && \
+		goose postgres "$${PG_URI}" -dir ${POSTGRES_SQL_PATH} down \
 	)
 
 # -----------------------------------------------------------------------------

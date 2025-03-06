@@ -16,7 +16,7 @@ func main() {
 
 	sql := gem.New(&gem.Config{
 		Tool:              gem.Goose,
-		OutputPath:        "./database/migrate",
+		OutputPath:        "./database/migrations/postgres",
 		KeepDroppedColumn: true,
 	})
 
