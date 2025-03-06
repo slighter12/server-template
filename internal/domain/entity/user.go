@@ -13,8 +13,8 @@ import (
 type User struct {
 	ID        string          `json:"id" gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
 	Name      string          `json:"name" gorm:"type:varchar(32);not null"`
-	Email     string          `json:"email" gorm:"type:varchar(255);uniqueIndex;not null"`
-	Password  string          `json:"password" gorm:"type:varchar(60);not null"` // Password 欄位使用 varchar(60) 是因為 bcrypt 使用 DefaultCost (cost=10) 時，加密後的密碼長度固定為 60 字元
+	Email     string          `json:"email" gorm:"type:varchar(254);uniqueIndex;not null"` // RFC 5321 標準規定 email 最大長度為 254 字元
+	Password  string          `json:"password" gorm:"type:varchar(60);not null"`           // Password 欄位使用 varchar(60) 是因為 bcrypt 使用 DefaultCost (cost=10) 時，加密後的密碼長度固定為 60 字元
 	Status    user.UserStatus `json:"status" gorm:"type:integer;not null;default:1"`
 	CreatedAt time.Time       `json:"created_at" gorm:"type:timestamp with time zone;not null;default:CURRENT_TIMESTAMP"`
 	UpdatedAt time.Time       `json:"updated_at" gorm:"type:timestamp with time zone;not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
@@ -23,6 +23,9 @@ type User struct {
 func (u *User) Validate() error {
 	if u.Email == "" {
 		return errors.New("email is required")
+	}
+	if len(u.Email) > 254 {
+		return errors.New("email must be less than 254 characters")
 	}
 
 	if len(u.Name) > 32 {
