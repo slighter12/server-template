@@ -89,3 +89,28 @@ postgres:
     maxIdleConns: 25
     maxOpenConns: 50
     connMaxLifetime: "5m"
+
+redis:
+  address:
+    - "localhost:7001"
+    - "localhost:7002"
+    - "localhost:7003"
+    - "localhost:7004"
+    - "localhost:7005"
+    - "localhost:7006"
+  password: "yourpassword"
+  poolSize: 10
+  minIdleConns: 5
+  maxIdleConns: 10
+  connMaxIdleTime: "30m"
+  dialTimeout: "10s"
+  readTimeout: "10s"
+  writeTimeout: "10s"
+
+rpc:
+  server:
+    target: "localhost:4433"
+  clients:
+    auth:
+      target: "localhost:4433"
+

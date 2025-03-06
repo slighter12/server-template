@@ -23,6 +23,7 @@ import (
 	"server-template/internal/usecase"
 
 	"github.com/pkg/errors"
+	rdb "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 )
@@ -61,48 +62,49 @@ func injectInfra() fx.Option {
 func injectConn() fx.Option {
 	return fx.Options(
 		fx.Provide(
-			// MySQL connections
-			func(cfg *config.Config, lc fx.Lifecycle) (map[string]*gorm.DB, error) {
-				dbMap := make(map[string]*gorm.DB)
-				for name, dbCfg := range cfg.Mysql {
-					dbConn, err := mysql.New(lc, dbCfg)
-					if err != nil {
-						slog.Error("Failed to create MySQL connection", slog.String("name", name), slog.Any("error", err))
+			// Database connections
+			fx.Annotate(
+				func(cfg *config.Config, lc fx.Lifecycle) (map[string]*gorm.DB, map[string]*gorm.DB, error) {
+					// MySQL connections
+					mysqlMap := make(map[string]*gorm.DB)
+					for name, dbCfg := range cfg.Mysql {
+						dbConn, err := mysql.New(lc, dbCfg)
+						if err != nil {
+							slog.Error("Failed to create MySQL connection", slog.String("name", name), slog.Any("error", err))
 
-						return nil, errors.Wrap(err, "mysql.New")
+							return nil, nil, errors.Wrap(err, "mysql.New")
+						}
+						mysqlMap[name] = dbConn
 					}
-					dbMap[name] = dbConn
-				}
 
-				return dbMap, nil
-			},
+					// PostgreSQL connections
+					pgMap := make(map[string]*gorm.DB)
+					for name, dbCfg := range cfg.Postgres {
+						dbConn, err := postgres.NewWithPgx(lc, dbCfg)
+						if err != nil {
+							slog.Error("Failed to create PostgreSQL connection", slog.String("name", name), slog.Any("error", err))
 
-			// PostgreSQL connections
-			func(cfg *config.Config, lc fx.Lifecycle) (map[string]*gorm.DB, error) {
-				pgMap := make(map[string]*gorm.DB)
-				for name, dbCfg := range cfg.Postgres {
-					dbConn, err := postgres.NewWithPgx(lc, dbCfg)
-					if err != nil {
-						slog.Error("Failed to create PostgreSQL connection", slog.String("name", name), slog.Any("error", err))
-
-						return nil, errors.Wrap(err, "postgres.New")
+							return nil, nil, errors.Wrap(err, "postgres.New")
+						}
+						pgMap[name] = dbConn
 					}
-					pgMap[name] = dbConn
-				}
 
-				return pgMap, nil
-			},
+					return mysqlMap, pgMap, nil
+				},
+				fx.ResultTags(`name:"mysql_maps"`, `name:"postgres_maps"`),
+			),
 
 			// Default MySQL connection
 			fx.Annotate(
-				func(dbMap map[string]*gorm.DB) (*gorm.DB, error) {
-					db, ok := dbMap["main"]
+				func(mysqlMap map[string]*gorm.DB) (*gorm.DB, error) {
+					db, ok := mysqlMap["main"]
 					if !ok {
 						return nil, errors.New("main MySQL database not found")
 					}
 
 					return db, nil
 				},
+				fx.ParamTags(`name:"mysql_maps"`),
 				fx.ResultTags(`name:"default_mysql"`),
 			),
 
@@ -116,11 +118,16 @@ func injectConn() fx.Option {
 
 					return db, nil
 				},
+				fx.ParamTags(`name:"postgres_maps"`),
 				fx.ResultTags(`name:"default_postgres"`),
 			),
 		),
 		fx.Provide(
-			redis.NewClusterClient,
+			fx.Annotate(
+				func(cfg *config.Config, lc fx.Lifecycle) (*rdb.ClusterClient, error) {
+					return redis.NewClusterClient(lc, cfg.Redis)
+				},
+			),
 			mongo.New,
 			rpc.NewRPCClients,
 		),
@@ -133,7 +140,7 @@ func injectRepo() fx.Option {
 			repository.NewAuthRPC,
 			fx.Annotate(
 				repository.NewUserRepository,
-				fx.ParamTags(`name:"default"`),
+				fx.ParamTags(`name:"default_postgres"`),
 			),
 		),
 		fx.Decorate(func(cfg *config.Config, base repo.UserRepository) repo.UserRepository {

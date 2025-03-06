@@ -75,7 +75,7 @@ func New(
 	masterDSN := conn.Master.DSN(conn.Database)
 	dbBase, err := gorm.Open(mysql.Open(masterDSN), &gorm.Config{})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open master database connection")
+		return nil, errors.Wrapf(err, "open database connection: %s", masterDSN)
 	}
 
 	// 如果有從庫配置，設置讀寫分離

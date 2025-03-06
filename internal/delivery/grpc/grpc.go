@@ -28,10 +28,10 @@ type gRPCServer struct {
 	cfg        *config.Config
 	grpcServer *grpc.Server
 	logger     *slog.Logger
-	redis      *redis.Client
+	redis      *redis.ClusterClient
 }
 
-func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config, logger *slog.Logger, redis *redis.Client) (delivery.Delivery, error) {
+func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config, logger *slog.Logger, redis *redis.ClusterClient) (delivery.Delivery, error) {
 	var opts []grpc.ServerOption
 	if cfg.Observability.Otel.Enable {
 		opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
