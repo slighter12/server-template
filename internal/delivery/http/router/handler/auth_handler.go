@@ -64,6 +64,7 @@ func (h *AuthHandler) Register(c echo.Context) error {
 	token, user, err := h.authUseCase.Register(c.Request().Context(), req.Email, req.Password)
 	if err != nil {
 		h.logger.Error("Failed to register user", slog.Any("error", err))
+
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": err.Error(),
 		})
@@ -99,6 +100,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	token, user, err := h.authUseCase.Login(c.Request().Context(), req.Email, req.Password)
 	if err != nil {
 		h.logger.Error("Failed to login user", slog.Any("error", err))
+
 		return c.JSON(http.StatusUnauthorized, map[string]string{
 			"error": err.Error(),
 		})
@@ -139,6 +141,7 @@ func (h *AuthHandler) Logout(c echo.Context) error {
 	err := h.authUseCase.Logout(c.Request().Context(), tokenString)
 	if err != nil {
 		h.logger.Error("Failed to logout user", slog.Any("error", err))
+
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": err.Error(),
 		})

@@ -5,6 +5,7 @@ import (
 
 	"server-template/internal/domain/entity"
 	"server-template/internal/domain/repository"
+	"server-template/internal/repository/gen/query"
 
 	"go.uber.org/fx"
 	"gorm.io/gorm"
@@ -12,34 +13,25 @@ import (
 
 type userRepository struct {
 	fx.In
-
-	db *gorm.DB
+	q *query.Query
 }
 
 func NewUserRepository(db *gorm.DB) repository.UserRepository {
-	return &userRepository{db: db}
+	return &userRepository{q: query.Use(db)}
 }
 
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
-	return r.db.WithContext(ctx).Create(user).Error
+	return WrapNoValue(r.q.WithContext(ctx).User.Create(user), "Create")
 }
 
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*entity.User, error) {
-	var user entity.User
-	err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
-	if err != nil {
-		return nil, err
-	}
+	user, err := r.q.WithContext(ctx).User.Where(r.q.User.Email.Eq(email)).First()
 
-	return &user, nil
+	return WrapResult(user, err, "FindByEmail")
 }
 
 func (r *userRepository) FindByID(ctx context.Context, id string) (*entity.User, error) {
-	var user entity.User
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&user).Error
-	if err != nil {
-		return nil, err
-	}
+	user, err := r.q.WithContext(ctx).User.Where(r.q.User.ID.Eq(id)).First()
 
-	return &user, nil
+	return WrapResult(user, err, "FindByID")
 }

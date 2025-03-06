@@ -16,6 +16,7 @@ require (
 	github.com/samber/slog-echo v1.15.1
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.19.0
+	github.com/yanun0323/gem v0.2.21
 	go.mongodb.org/mongo-driver v1.17.2
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.59.0
 	go.opentelemetry.io/otel v1.34.0
@@ -109,4 +110,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250115164207-1a7da9e5054f // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250127172529-29210b9bc287 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gorm.io/datatypes v1.1.1-0.20230130040222-c43177d3cf8c // indirect
+	gorm.io/gen v0.3.26 // indirect
+	gorm.io/hints v1.1.0 // indirect
 )

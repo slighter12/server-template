@@ -46,6 +46,7 @@ func JWT(config JWTConfig) echo.MiddlewareFunc {
 			resp, err := config.AuthRPC.ValidateToken(ctx, tokenString)
 			if err != nil {
 				config.Logger.Error("Failed to validate token", slog.Any("error", err))
+
 				return c.JSON(http.StatusUnauthorized, map[string]string{
 					"error": "Invalid or expired token",
 				})

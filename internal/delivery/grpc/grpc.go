@@ -154,6 +154,7 @@ func (s *gRPCServer) ValidateToken(ctx context.Context, in *authpb.ValidateToken
 		resp := new(authpb.ValidateTokenResponse)
 		resp.GetStatus().SetCode(int32(codes.Unauthenticated))
 		resp.GetStatus().SetMessage("Token is invalid or has been revoked")
+
 		return resp, nil
 	}
 

@@ -64,11 +64,16 @@ issues:
     - path: internal/delivery/http/router/.*\.go
       linters:
         - wrapcheck
+    - path: internal/delivery/http/validator/.*\.go
+      linters:
+        - wrapcheck
     - linters:
       - lll
       source: "^//go:generate "
   exclude-dirs:
     - cmd/generator
+    - cmd/gen
+    - internal/repository/gen
 
 linters-settings:
   gci:
@@ -113,4 +118,6 @@ linters-settings:
       - lc fx.Lifecycle
       - ok bool
       - c echo.Context
+      - q *query.Query
+    ignore-names:
       - in

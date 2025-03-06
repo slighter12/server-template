@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+
 	"server-template/internal/domain/entity"
 	"server-template/internal/domain/repository"
 	"server-template/internal/domain/usecase"
