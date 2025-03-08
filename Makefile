@@ -67,28 +67,29 @@ db-mysql-seeders-init: ## initialize new MySQL seeder
 	)
 
 define migrate_command
-	DB_PORT_VALUE=${DB_PORT:-3306}
-	migrate --database "mysql://root:$(DB_PASSWORD)@tcp(localhost:$${DB_PORT_VALUE})/$(PROJECT_NAME)?charset=utf8&parseTime=True&loc=Local" --path $(1) $(2)
+	migrate -database "mysql://root:$(1)@tcp(127.0.0.1:$(2))/$(3)?multiStatements=true" -path $(4) $(5)
 endef
 
 db-mysql-up: ## apply all MySQL migrations, including seeders
 	@( \
+		printf "Enter database name: "; read -r DB_NAME && \
 		printf "Enter pass for db: "; read -rs DB_PASSWORD && \
-		export DB_PASSWORD=$${DB_PASSWORD} && \
+		echo && \
 		printf "Enter port(3306...): "; read -r DB_PORT && \
-		export DB_PORT=$${DB_PORT} && \
-		$(call migrate_command,${MYSQL_SQL_PATH},up) && \
-		$(call migrate_command,${MYSQL_SEEDERS_SQL_PATH},up) \
+		: "$${DB_PORT:=3306}" && \
+		$(call migrate_command,$$DB_PASSWORD,$$DB_PORT,$$DB_NAME,${MYSQL_SQL_PATH},up) && \
+		$(call migrate_command,$$DB_PASSWORD,$$DB_PORT,$$DB_NAME,${MYSQL_SEEDERS_SQL_PATH},up) \
 	)
 
 db-mysql-down: ## revert all MySQL migrations, including seeders
 	@( \
+		printf "Enter database name: "; read -r DB_NAME && \
 		printf "Enter pass for db: "; read -rs DB_PASSWORD && \
-		export DB_PASSWORD=$${DB_PASSWORD} && \
+		echo && \
 		printf "Enter port(3306...): "; read -r DB_PORT && \
-		export DB_PORT=$${DB_PORT} && \
-		$(call migrate_command,${MYSQL_SEEDERS_SQL_PATH},down) && \
-		$(call migrate_command,${MYSQL_SQL_PATH},down) \
+		: "$${DB_PORT:=3306}" && \
+		$(call migrate_command,$$DB_PASSWORD,$$DB_PORT,$$DB_NAME,${MYSQL_SEEDERS_SQL_PATH},down) && \
+		$(call migrate_command,$$DB_PASSWORD,$$DB_PORT,$$DB_NAME,${MYSQL_SQL_PATH},down) \
 	)
 
 # -----------------------------------------------------------------------------

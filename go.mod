@@ -14,9 +14,9 @@ require (
 	github.com/quic-go/quic-go v0.49.0
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/samber/slog-echo v1.15.1
+	github.com/slighter12/gem v0.0.0-20250308101232-2a570baf1db0
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.19.0
-	github.com/yanun0323/gem v0.2.21
 	go.mongodb.org/mongo-driver v1.17.2
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.59.0
 	go.opentelemetry.io/otel v1.34.0
@@ -32,6 +32,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.11
+	gorm.io/gen v0.3.26
 	gorm.io/gorm v1.25.12
 	gorm.io/plugin/dbresolver v1.5.3
 )
@@ -111,6 +112,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250127172529-29210b9bc287 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gorm.io/datatypes v1.1.1-0.20230130040222-c43177d3cf8c // indirect
-	gorm.io/gen v0.3.26 // indirect
 	gorm.io/hints v1.1.0 // indirect
 )

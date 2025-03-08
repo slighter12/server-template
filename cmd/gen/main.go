@@ -5,7 +5,7 @@ import (
 
 	"server-template/internal/domain/entity"
 
-	"github.com/yanun0323/gem"
+	"github.com/slighter12/gem"
 	"gorm.io/gen"
 )
 
@@ -16,6 +16,7 @@ func main() {
 
 	sql := gem.New(&gem.Config{
 		Tool:              gem.Goose,
+		QuoteChar:         '"',
 		OutputPath:        "./database/migrations/postgres",
 		KeepDroppedColumn: true,
 	})
