@@ -13,28 +13,29 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// clientKey 定義支持的 RPC 客戶端類型
-type clientKey string
+// ClientKey 定義支持的 RPC 客戶端類型
+type ClientKey string
 
 const (
-	AuthClient clientKey = "auth"
+	AuthClient ClientKey = "auth"
 )
 
-// RPCClients 包含所有 RPC 客戶端
-type RPCClients struct {
-	clients map[clientKey]*grpc.ClientConn
+// Clients 包含所有 RPC 客戶端
+type Clients struct {
+	clients map[ClientKey]*grpc.ClientConn
 }
 
-type rpcClientsParams struct {
+type Params struct {
 	fx.In
 	fx.Lifecycle
 
 	Config *config.Config
 }
 
-func NewRPCClients(params rpcClientsParams) (*RPCClients, error) {
-	rpcClients := &RPCClients{
-		clients: make(map[clientKey]*grpc.ClientConn),
+// New 創建 RPC 客戶端管理器
+func New(params Params) (*Clients, error) {
+	rpcClients := &Clients{
+		clients: make(map[ClientKey]*grpc.ClientConn),
 	}
 
 	opts := []grpc.DialOption{
@@ -47,12 +48,11 @@ func NewRPCClients(params rpcClientsParams) (*RPCClients, error) {
 	// 遍歷配置創建客戶端
 	for clientName, clientConfig := range params.Config.RPC.Clients {
 		clientConn, err := grpc.NewClient(clientConfig.Target, opts...)
-
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 
-		rpcClients.clients[clientKey(clientName)] = clientConn
+		rpcClients.clients[ClientKey(clientName)] = clientConn
 	}
 
 	// 註冊生命週期鉤子
@@ -72,7 +72,7 @@ func NewRPCClients(params rpcClientsParams) (*RPCClients, error) {
 }
 
 // GetClient 獲取指定的 RPC 客戶端
-func (r *RPCClients) GetClient(key clientKey) (*grpc.ClientConn, error) {
+func (r *Clients) GetClient(key ClientKey) (*grpc.ClientConn, error) {
 	client, ok := r.clients[key]
 	if !ok {
 		return nil, fmt.Errorf("RPC client not found: %s", key)

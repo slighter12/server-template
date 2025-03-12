@@ -121,3 +121,4 @@ linters-settings:
       - q *query.Query
     ignore-names:
       - in
+      - db

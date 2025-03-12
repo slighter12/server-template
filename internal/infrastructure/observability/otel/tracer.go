@@ -1,4 +1,4 @@
-package observability
+package otel
 
 import (
 	"context"
@@ -19,6 +19,70 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// Params 定義 tracer 所需的參數
+type Params struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Config    *config.Config
+}
+
+// New 創建並初始化 OpenTelemetry tracer
+func New(ctx context.Context, params Params) error {
+	if !params.Config.Observability.Otel.Enable {
+		return nil
+	}
+
+	res, err := resource.New(
+		ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(params.Config.Env.ServiceName),
+			semconv.ServiceVersionKey.String("v1.0.0"),
+			semconv.DeploymentEnvironmentKey.String(params.Config.Env.Env),
+		),
+	)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	exporterType := telemetry.ExporterType(params.Config.Observability.Otel.Exporter)
+	exporter, err := createExporter(ctx, exporterType, params.Config)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	tracer := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+
+	otel.SetTracerProvider(tracer)
+
+	params.Lifecycle.Append(fx.Hook{
+		OnStop: func(stopCtx context.Context) error {
+			return tracer.Shutdown(stopCtx)
+		},
+	})
+
+	return nil
+}
+
+func createExporter(ctx context.Context, exporterType telemetry.ExporterType, cfg *config.Config) (sdktrace.SpanExporter, error) {
+	if !exporterType.IsValid() {
+		return nil, fmt.Errorf("unsupported exporter type: %s", exporterType)
+	}
+
+	switch exporterType {
+	case telemetry.ExporterOTLPGRPC:
+		return createOTLPGRPCExporter(ctx, cfg.Observability.Otel.Host, cfg.Observability.Otel.Port, cfg.Observability.Otel.IsSecure)
+	case telemetry.ExporterOTLPHTTP:
+		return createOTLPHTTPExporter(ctx, cfg.Observability.Otel.Host, cfg.Observability.Otel.Port, cfg.Observability.Otel.IsSecure)
+	default:
+		return nil, fmt.Errorf("unhandled exporter type: %s", exporterType)
+	}
+}
 
 func createOTLPGRPCExporter(ctx context.Context, host string, port int, isSecure bool) (sdktrace.SpanExporter, error) {
 	endpoint := fmt.Sprintf("%s:%d", host, port)
@@ -68,63 +132,4 @@ func createOTLPHTTPExporter(ctx context.Context, host string, port int, isSecure
 	}
 
 	return exporter, nil
-}
-
-func createExporter(ctx context.Context, exporterType telemetry.ExporterType, cfg *config.Config) (sdktrace.SpanExporter, error) {
-	if !exporterType.IsValid() {
-		return nil, fmt.Errorf("unsupported exporter type: %s", exporterType)
-	}
-
-	switch exporterType {
-	case telemetry.ExporterOTLPGRPC:
-		return createOTLPGRPCExporter(ctx, cfg.Observability.Otel.Host, cfg.Observability.Otel.Port, cfg.Observability.Otel.IsSecure)
-	case telemetry.ExporterOTLPHTTP:
-		return createOTLPHTTPExporter(ctx, cfg.Observability.Otel.Host, cfg.Observability.Otel.Port, cfg.Observability.Otel.IsSecure)
-	default:
-		return nil, fmt.Errorf("unhandled exporter type: %s", exporterType)
-	}
-}
-
-func NewTracer(
-	ctx context.Context,
-	lc fx.Lifecycle,
-	cnf *config.Config,
-) error {
-	if !cnf.Observability.Otel.Enable {
-		return nil
-	}
-
-	res, err := resource.New(
-		ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(cnf.Env.ServiceName),
-			semconv.ServiceVersionKey.String("v1.0.0"),
-			semconv.DeploymentEnvironmentKey.String(cnf.Env.Env),
-		),
-	)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	exporterType := telemetry.ExporterType(cnf.Observability.Otel.Exporter)
-	exporter, err := createExporter(ctx, exporterType, cnf)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	tracer := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-	)
-
-	otel.SetTracerProvider(tracer)
-
-	lc.Append(fx.Hook{
-		OnStop: func(stopCtx context.Context) error {
-			return tracer.Shutdown(stopCtx)
-		},
-	})
-
-	return nil
 }

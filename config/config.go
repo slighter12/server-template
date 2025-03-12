@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"server-template/internal/libs/mysql"
-	"server-template/internal/libs/postgres"
-	"server-template/internal/libs/redis"
-
 	"github.com/pkg/errors"
+	"github.com/slighter12/go-lib/database/mongo"
+	"github.com/slighter12/go-lib/database/mysql"
+	"github.com/slighter12/go-lib/database/postgres"
+	"github.com/slighter12/go-lib/database/redis/cluster"
 	"github.com/spf13/viper"
 )
 
@@ -56,7 +56,8 @@ type Config struct {
 
 	Mysql    map[string]*mysql.DBConn    `json:"mysql" yaml:"mysql" mapstructure:"mysql"`
 	Postgres map[string]*postgres.DBConn `json:"postgres" yaml:"postgres" mapstructure:"postgres"`
-	Redis    *redis.Conn                 `json:"redis" yaml:"redis"`
+	Redis    *cluster.Conn               `json:"redis" yaml:"redis"`
+	Mongo    map[string]*mongo.DBConn    `json:"mongo" yaml:"mongo" mapstructure:"mongo"`
 
 	RPC struct {
 		Clients map[string]RPCClientConfig `mapstructure:"clients" json:"clients" yaml:"clients"`
