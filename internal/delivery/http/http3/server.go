@@ -3,7 +3,6 @@ package http3
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -53,7 +52,7 @@ func NewHTTP3(params HTTP3Params) (delivery.Delivery, error) {
 	}
 
 	server := &http3.Server{
-		Addr:    fmt.Sprintf(":%d", params.Config.HTTP.Port),
+		Port:    params.Config.HTTP.Port,
 		Handler: echoServer,
 		TLSConfig: &tls.Config{
 			Certificates: certificates,
@@ -91,7 +90,7 @@ func (s *http3Server) Serve(ctx context.Context) error {
 		return errors.Wrap(err, "failed to create UDP listener")
 	}
 
-	s.logger.Info("Starting HTTP/3 server", slog.Any("port", s.cfg.HTTP.Port))
+	s.logger.Info("Starting HTTP/3 server", slog.Int("port", s.cfg.HTTP.Port))
 	if err := s.server.Serve(udpConn); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return errors.Wrap(err, "failed to serve http3")
 	}

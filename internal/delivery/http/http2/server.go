@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"server-template/config"
 	"server-template/internal/delivery/http/common"
@@ -52,7 +51,9 @@ func NewHTTP2(params HTTP2Params) (delivery.Delivery, error) {
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", params.Config.HTTP.Port),
 		Handler:           echoServer,
-		ReadHeaderTimeout: 20 * time.Second,
+		ReadTimeout:       params.Config.HTTP.Timeouts.ReadTimeout,
+		ReadHeaderTimeout: params.Config.HTTP.Timeouts.ReadHeaderTimeout,
+		WriteTimeout:      params.Config.HTTP.Timeouts.WriteTimeout,
 		TLSConfig: &tls.Config{
 			Certificates: certificates,
 			MinVersion:   tls.VersionTLS12,
@@ -74,7 +75,7 @@ func NewHTTP2(params HTTP2Params) (delivery.Delivery, error) {
 }
 
 func (s *http2Server) Serve(ctx context.Context) error {
-	s.logger.Info("Starting HTTP/2 server", slog.Any("port", s.cfg.HTTP.Port))
+	s.logger.Info("Starting HTTP/2 server", slog.Int("port", s.cfg.HTTP.Port))
 	if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return errors.Wrap(err, "failed to serve https")
 	}
