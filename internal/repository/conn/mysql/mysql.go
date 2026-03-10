@@ -52,7 +52,7 @@ func New(params Params) (Result, error) {
 		}
 
 		// 添加生命週期管理
-		params.Lifecycle.Append(fx.Hook{
+		params.Append(fx.Hook{
 			OnStart: func(startCtx context.Context) error {
 				ctx, cancel := context.WithTimeout(startCtx, lifecycle.DefaultTimeout)
 				defer cancel()

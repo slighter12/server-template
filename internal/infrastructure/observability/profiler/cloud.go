@@ -51,7 +51,8 @@ func New(params Params) error {
 	// 準備客戶端選項
 	var clientOptions []option.ClientOption
 	if params.Config.Env.Env == "local" && params.Config.Observability.CloudProfiler.ServiceAccount != "" {
-		clientOptions = append(clientOptions, option.WithCredentialsFile(params.Config.Observability.CloudProfiler.ServiceAccount))
+		clientOptions = append(clientOptions,
+			option.WithAuthCredentialsFile(option.ServiceAccount, params.Config.Observability.CloudProfiler.ServiceAccount))
 		params.Logger.Info("Using local service account for Profiler",
 			slog.String("service_account", params.Config.Observability.CloudProfiler.ServiceAccount))
 	}

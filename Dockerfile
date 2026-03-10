@@ -38,6 +38,6 @@ RUN apk update && \
 ADD https://github.com/golang/go/raw/master/lib/time/zoneinfo.zip /usr/local/go/lib/time/zoneinfo.zip
 
 COPY --from=builder /app/${IMAGE_NAME} ./${IMAGE_NAME}
-COPY --from=builder /app/configs/config.yaml ./config.yaml
+COPY --from=builder /app/config/config.yaml ./config.yaml
 
 ENTRYPOINT ["/usr/local/bin/${IMAGE_NAME}"]
