@@ -8,7 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	mongoLib "github.com/slighter12/go-lib/database/mongo"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 )
 
@@ -41,13 +41,13 @@ func New(params Params) (Result, error) {
 
 	// 遍歷所有 MongoDB 配置創建客戶端
 	for name, cfg := range params.Config.Mongo {
-		client, err := mongoLib.New(context.Background(), cfg)
+		client, err := mongoLib.New(cfg)
 		if err != nil {
 			return result, errors.Wrapf(err, "failed to create MongoDB client: %s", name)
 		}
 
 		// 添加生命週期管理
-		params.Lifecycle.Append(fx.Hook{
+		params.Append(fx.Hook{
 			OnStart: func(startCtx context.Context) error {
 				ctx, cancel := context.WithTimeout(startCtx, lifecycle.DefaultTimeout)
 				defer cancel()

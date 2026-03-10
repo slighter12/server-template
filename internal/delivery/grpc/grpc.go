@@ -61,7 +61,9 @@ func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config, logg
 }
 
 func (s *gRPCServer) Serve(ctx context.Context) error {
-	lis, err := net.Listen("tcp", s.cfg.RPC.Server.Target)
+	var listenConfig net.ListenConfig
+
+	lis, err := listenConfig.Listen(ctx, "tcp", s.cfg.RPC.Server.Target)
 	if err != nil {
 		slog.Error("Failed to listen", slog.Any("error", err))
 

@@ -29,7 +29,7 @@ func New(params Params) (*redis.ClusterClient, error) {
 	client := redisLib.New(params.Config.Redis)
 
 	// 添加生命週期管理
-	params.Lifecycle.Append(fx.Hook{
+	params.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
 			ctx, cancel := context.WithTimeout(startCtx, lifecycle.DefaultTimeout)
 			defer cancel()

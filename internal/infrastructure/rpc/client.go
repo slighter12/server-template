@@ -56,7 +56,7 @@ func New(params Params) (*Clients, error) {
 	}
 
 	// 註冊生命週期鉤子
-	params.Lifecycle.Append(fx.Hook{
+	params.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			for name, client := range rpcClients.clients {
 				if err := client.Close(); err != nil {
