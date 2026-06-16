@@ -10,7 +10,7 @@ require (
 	github.com/grafana/pyroscope-go v1.2.8
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/pkg/errors v0.9.1
-	github.com/quic-go/quic-go v0.59.0
+	github.com/quic-go/quic-go v0.59.1
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/samber/slog-echo v1.21.0
 	github.com/slighter12/gem v0.0.0-20250328094759-833c3290c2d5
