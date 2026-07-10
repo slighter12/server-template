@@ -28,7 +28,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.uber.org/fx v1.24.0
-	golang.org/x/crypto v0.51.0
+	golang.org/x/crypto v0.52.0
 	google.golang.org/api v0.276.0
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
