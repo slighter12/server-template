@@ -63,10 +63,12 @@ func violatedConstraintName(err error) string {
 	return ""
 }
 
-// violatesColumn reports whether err is a unique violation on a constraint
-// whose name mentions column. When the driver does not report the constraint
+// violatesEmail reports whether err is a unique violation on a constraint
+// whose name mentions the email column. When the driver does not report the constraint
 // name, the error text is searched instead.
-func violatesColumn(err error, column string) bool {
+func violatesEmail(err error) bool {
+	const column = "email"
+
 	if !isUniqueConstraintViolation(err) {
 		return false
 	}

@@ -133,40 +133,15 @@ func parseHash(encoded string) (*parsedHash, error) {
 		return nil, errInvalidHash
 	}
 
-	v, ok := strings.CutPrefix(parts[1], "v=")
-	if !ok {
+	if v, ok := strings.CutPrefix(parts[1], "v="); !ok {
 		return nil, errInvalidHash
-	}
-	if ver, err := strconv.Atoi(v); err != nil || ver != argon2Version {
+	} else if ver, err := strconv.Atoi(v); err != nil || ver != argon2Version {
 		return nil, errInvalidHash
 	}
 
 	var p parsedHash
-	params := strings.Split(parts[2], ",")
-	if len(params) != 3 {
-		return nil, errInvalidHash
-	}
-	for i, prefix := range []string{"m=", "t=", "p="} {
-		raw, ok := strings.CutPrefix(params[i], prefix)
-		if !ok {
-			return nil, errInvalidHash
-		}
-		bits := 32
-		if i == 2 {
-			bits = 8
-		}
-		n, err := strconv.ParseUint(raw, 10, bits)
-		if err != nil || n == 0 {
-			return nil, errInvalidHash
-		}
-		switch i {
-		case 0:
-			p.memory = uint32(n)
-		case 1:
-			p.iterations = uint32(n)
-		default:
-			p.parallelism = uint8(n)
-		}
+	if err := p.parseParams(parts[2]); err != nil {
+		return nil, err
 	}
 
 	var err error
@@ -178,4 +153,37 @@ func parseHash(encoded string) (*parsedHash, error) {
 	}
 
 	return &p, nil
+}
+
+// parseParams reads the "m=...,t=...,p=..." section.
+func (p *parsedHash) parseParams(section string) error {
+	params := strings.Split(section, ",")
+	if len(params) != 3 {
+		return errInvalidHash
+	}
+
+	for i, prefix := range []string{"m=", "t=", "p="} {
+		raw, ok := strings.CutPrefix(params[i], prefix)
+		if !ok {
+			return errInvalidHash
+		}
+		bits := 32
+		if i == 2 {
+			bits = 8
+		}
+		n, err := strconv.ParseUint(raw, 10, bits)
+		if err != nil || n == 0 {
+			return errInvalidHash
+		}
+		switch i {
+		case 0:
+			p.memory = uint32(n)
+		case 1:
+			p.iterations = uint32(n)
+		default:
+			p.parallelism = uint8(n)
+		}
+	}
+
+	return nil
 }

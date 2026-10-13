@@ -42,6 +42,9 @@ linters:
     - whitespace
     - wrapcheck
   settings:
+    cyclop:
+      # Default 10 is too tight for status/kind switch tables and parsers.
+      max-complexity: 15
     forbidigo:
       forbid:
         - pattern: ^fmt\.Print(f|ln)?$
@@ -86,22 +89,69 @@ linters:
     revive:
       severity: warning
     varnamelen:
+      # Idiomatic short names used across the template.
       ignore-names:
         - in
         - db
         - fn
+        - id
+        - i
+        - n
+        - b
+        - t
+        - s
+        - u
+        - v
+        - a
+        - p
+        - c
+        - r
+        - w
+        - wg
+        - ln
+        - st
+        - ae
+        - fe
+        - pc
       ignore-decls:
         - ok bool
-        - c echo.Context
+        - c *echo.Context
         - q *query.Query
         - tx *gorm.DB
         - e *echo.Echo
         - lc fx.Lifecycle
+        - w http.ResponseWriter
     wrapcheck:
+      # Errors from our own packages are already *apperr.Error (or carry the
+      # apperr sentinel contract): wrapping them again would only add noise.
       ignore-package-globs:
-        - github.com/labstack/echo/v4
-        - server-template/internal/pkg/apperr
+        - server-template/internal/*
+        - server-template/proto/*
+        - github.com/labstack/echo/v5*
         - github.com/slighter12/go-lib/errors/stack
+      # Interface values from our own layers (usecase, repository, rpc client).
+      ignore-interface-regexps:
+        - ^server-template/internal/
+        - ^server-template/proto/
+      ignore-sigs:
+        # wrapcheck defaults, kept because setting ignore-sigs replaces them.
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+        - .WithMessage(
+        - .WithMessagef(
+        - .WithStack(
+        # slog.Handler decorators pass the inner handler's error through.
+        - .Handle(
+        # gRPC status errors are the transport contract.
+        - .Err()
+        # Echo's own (v5) JSON/serializer errors reach the Echo error handler.
+        - encoding/json/v2.MarshalWrite(
+        - .ToMiddleware()
+        - .GetClient(
   exclusions:
     generated: lax
     presets:
@@ -136,6 +186,17 @@ linters:
       - linters:
           - lll
         source: "^//go:generate "
+      # Intentional package-level state: ldflags-injected Version, fx.Module
+      # values and read-only Kind<->code lookup tables (sentinel errors are
+      # already allowed by the linter).
+      - linters:
+          - gochecknoglobals
+        path: (cmd/server-template/version|internal/delivery/grpc/errors|internal/infrastructure/rpc/errors|internal/pkg/apperr/apperr|internal/delivery/http/server/server)\.go
+      # slog.Handler.Handle takes slog.Record by value; that is the API contract.
+      - linters:
+          - gocritic
+        text: "hugeParam: r is heavy"
+        path: internal/infrastructure/observability/otel/slog_handler\.go
       - linters:
           - gosec
         excludes:

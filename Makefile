@@ -12,6 +12,7 @@ SQL_FILE_TIMESTAMP := $(shell date '+%Y%m%d%H%M%S')
 GitCommit := $(shell git rev-parse HEAD)
 Date := $(shell date -Iseconds)
 SHELL := /bin/bash
+GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 ########
 # test #
@@ -25,7 +26,7 @@ test-race: ## launch all tests with race detection
 ########
 
 lint: ## lints the entire codebase
-	@golangci-lint run ./... --config=./.golangci.yaml
+	@$(GOLANGCI_LINT) run ./... --config=./.golangci.yaml
 
 #######
 # sec #
@@ -61,6 +62,8 @@ otel-verify: ## verify OpenTelemetry instrumentation
 ######
 POSTGRES_SQL_PATH := ./database/migrations/postgres
 POSTGRES_SEEDERS_SQL_PATH := ./database/migrations/postgres/seeders
+# Defaults match docker-compose.yml; override with `make db-postgres-up POSTGRES_DSN=...`.
+POSTGRES_DSN ?= postgres://app:app@localhost:5432/app?sslmode=disable
 
 # -----------------------------------------------------------------------------
 # PostgreSQL
@@ -85,39 +88,18 @@ db-postgres-create: ## create new PostgreSQL migration
 		go tool goose create $${MIGRATE_NAME} sql -dir ${POSTGRES_SQL_PATH} \
 	)
 
-define goose_migrate_command
-	PG_URI="postgres://postgres:$(PG_PASSWORD)@localhost:$(PG_PORT)/$(DB_NAME)?sslmode=disable"
-	go tool goose postgres -dir $(1) $(2) $${PG_URI}
-endef
+db-postgres-up: ## apply all PostgreSQL migrations (override POSTGRES_DSN)
+	go tool goose -dir ${POSTGRES_SQL_PATH} postgres "${POSTGRES_DSN}" up
 
-db-postgres-up: ## apply all PostgreSQL migrations
-	@( \
-		printf "Enter database name: "; read -r DB_NAME && \
-		printf "Enter pass for db: "; read -rs PG_PASSWORD && \
-		printf "Enter port(5432...): "; read -r PG_PORT && \
-		PG_PORT=$${PG_PORT:-5432} && \
-		PG_URI="postgres://root:$${PG_PASSWORD}@localhost:$${PG_PORT}/$${DB_NAME}?sslmode=disable" && \
-		go tool goose postgres "$${PG_URI}" -dir ${POSTGRES_SQL_PATH} up \
-	)
+db-postgres-down: ## revert the last PostgreSQL migration (override POSTGRES_DSN)
+	go tool goose -dir ${POSTGRES_SQL_PATH} postgres "${POSTGRES_DSN}" down
 
-db-postgres-down: ## revert all PostgreSQL migrations
-	@( \
-		printf "Enter database name: "; read -r DB_NAME && \
-		printf "Enter pass for db: "; read -rs PG_PASSWORD && \
-		printf "Enter port(5432...): "; read -r PG_PORT && \
-		PG_PORT=$${PG_PORT:-5432} && \
-		PG_URI="postgres://root:$${PG_PASSWORD}@localhost:$${PG_PORT}/$${DB_NAME}?sslmode=disable" && \
-		go tool goose postgres "$${PG_URI}" -dir ${POSTGRES_SQL_PATH} down \
-	)
+##########
+# format #
+##########
 
-###########
-#   GCI   #
-###########
-
-GCI_DOMAIN_PREFIX ?=
-
-gci-format: ## format imports
-	gci write --skip-generated -s standard -s default $$(if $(GCI_DOMAIN_PREFIX),-s "prefix($${GCI_DOMAIN_PREFIX})",) -s "prefix($(PROJECT_NAME))" ./
+gci-format: ## format code and imports (golangci-lint fmt, uses .golangci.yaml)
+	$(GOLANGCI_LINT) fmt --config=./.golangci.yaml ./...
 
 #########
 # build #

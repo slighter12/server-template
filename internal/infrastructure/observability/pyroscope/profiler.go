@@ -74,7 +74,7 @@ func New(params Params) error {
 		},
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("start pyroscope profiler: %w", err)
 	}
 
 	params.Lifecycle.Append(fx.Hook{

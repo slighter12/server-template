@@ -105,8 +105,16 @@ func TestShutdownWaitsForInflightRequest(t *testing.T) {
 			err  error
 		}
 		resCh := make(chan result, 1)
+		// ts.URL is only set by the first Client call.
+		client := ts.Client()
 		go func() {
-			resp, err := ts.Client().Get(ts.URL)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.URL, nil)
+			if err != nil {
+				resCh <- result{err: err}
+
+				return
+			}
+			resp, err := client.Do(req)
 			if err != nil {
 				resCh <- result{err: err}
 

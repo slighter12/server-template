@@ -129,6 +129,13 @@ func (b *lockedBuffer) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
 
+func (b *lockedBuffer) raw() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.String()
+}
+
 func (b *lockedBuffer) lines() []map[string]any {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -395,7 +402,7 @@ func attrString(t *testing.T, s tracetest.SpanStub, key string) string {
 	v, ok := attrOf(s, key)
 	require.True(t, ok, "span %q has no attribute %q; has %v", s.Name, key, s.Attributes)
 
-	return v.Emit()
+	return v.String()
 }
 
 // httpServerSpan returns the single server span created by echo-otel.
@@ -623,6 +630,13 @@ func TestRequestLogCarriesTraceID(t *testing.T) {
 	assert.Equal(t, httpSpan.SpanContext.TraceID().String(), entry["trace_id"])
 	assert.Equal(t, httpSpan.SpanContext.SpanID().String(), entry["span_id"])
 	assert.NotEmpty(t, entry["request_id"])
+	// The trace handler is the only source: no duplicated keys in the raw line.
+	for raw := range strings.SplitSeq(h.logs.raw(), "\n") {
+		if strings.Contains(raw, `"msg":"HTTP request"`) {
+			assert.Equal(t, 1, strings.Count(raw, `"trace_id"`), "duplicate trace_id in %s", raw)
+			assert.Equal(t, 1, strings.Count(raw, `"span_id"`), "duplicate span_id in %s", raw)
+		}
+	}
 	assert.NotContains(t, fmt.Sprint(entry), testPassword, "password leaked into the log line")
 }
 

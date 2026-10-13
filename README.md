@@ -58,7 +58,7 @@ proto/pb/              auth.proto and generated code
 
 ## Common commands
 
-`make help` lists everything. Frequent ones: `make test-race`, `make lint`, `make proxy.gen`, `make proto.gen`, `make modernize-check`.
+`make help` lists everything. Frequent ones: `make test-race`, `make lint`, `make proxy.gen`, `make proto.gen`, `make modernize-check`, `make gci-format` (`golangci-lint fmt`), `make db-postgres-up` / `db-postgres-down` (non-interactive; override `POSTGRES_DSN`, default matches docker-compose).
 
 ## Docs
 

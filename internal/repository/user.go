@@ -29,7 +29,7 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 	switch {
 	case err == nil:
 		return nil
-	case violatesColumn(err, "email"):
+	case violatesEmail(err):
 		return apperr.Wrap(err, entity.ErrEmailTaken)
 	case isUniqueConstraintViolation(err):
 		return apperr.Wrap(err, apperr.ErrConflict)

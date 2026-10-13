@@ -111,7 +111,9 @@ func TestRequestLogger_ValidationFieldsLoggedForClientErrors(t *testing.T) {
 	assert.Contains(t, logs.String(), `"code":"VALIDATION_FAILED"`)
 }
 
-func TestRequestLogger_TraceAttributes(t *testing.T) {
+// The request logger must not add trace_id/span_id itself: the slog trace
+// handler is the single source, otherwise the keys would be duplicated.
+func TestRequestLogger_LeavesTraceAttributesToTraceHandler(t *testing.T) {
 	e, logs := newTestEcho(t, RequestLoggerOptions{Debug: true})
 	e.GET("/x", func(c *echo.Context) error { return c.NoContent(http.StatusNoContent) })
 	sc := trace.NewSpanContext(trace.SpanContextConfig{
@@ -124,16 +126,6 @@ func TestRequestLogger_TraceAttributes(t *testing.T) {
 	e.ServeHTTP(newRecorder(), req)
 
 	rec := lastLog(t, logs.String())
-	assert.Equal(t, sc.TraceID().String(), rec["trace_id"])
-	assert.Equal(t, sc.SpanID().String(), rec["span_id"])
-}
-
-func TestRequestLogger_NoTraceAttributesWithoutSpan(t *testing.T) {
-	e, logs := newTestEcho(t, RequestLoggerOptions{Debug: true})
-	e.GET("/x", func(c *echo.Context) error { return c.NoContent(http.StatusNoContent) })
-
-	serve(t, e, http.MethodGet, "/x", "")
-
-	rec := lastLog(t, logs.String())
 	assert.NotContains(t, rec, "trace_id")
+	assert.NotContains(t, rec, "span_id")
 }

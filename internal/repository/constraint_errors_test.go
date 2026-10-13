@@ -26,9 +26,9 @@ func TestConstraintHelpers(t *testing.T) {
 	assert.Equal(t, "udx_email", violatedConstraintName(uniq))
 	assert.Empty(t, violatedConstraintName(errors.New("x")))
 
-	assert.True(t, violatesColumn(uniq, "email"))
-	assert.False(t, violatesColumn(&pgconn.PgError{Code: "23505", ConstraintName: "users_pkey"}, "email"))
-	assert.True(t, violatesColumn(errors.New(`duplicate key value violates unique constraint "users_email_key"`), "email"))
+	assert.True(t, violatesEmail(uniq))
+	assert.False(t, violatesEmail(&pgconn.PgError{Code: "23505", ConstraintName: "users_pkey"}))
+	assert.True(t, violatesEmail(errors.New(`duplicate key value violates unique constraint "users_email_key"`)))
 
 	assert.True(t, isForeignKeyViolation(&pgconn.PgError{Code: "23503"}))
 	assert.True(t, isForeignKeyViolation(gorm.ErrForeignKeyViolated))

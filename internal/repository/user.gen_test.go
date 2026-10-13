@@ -101,12 +101,12 @@ func TestUserRepositoryProxy_ServerErrorHasNoRawMessage(t *testing.T) {
 	var all strings.Builder
 	all.WriteString(s.Status.Description)
 	for _, a := range s.Attributes {
-		all.WriteString(a.Value.Emit())
+		all.WriteString(a.Value.String())
 	}
 	for _, e := range s.Events {
 		all.WriteString(e.Name)
 		for _, a := range e.Attributes {
-			all.WriteString(a.Value.Emit())
+			all.WriteString(a.Value.String())
 		}
 	}
 	if strings.Contains(all.String(), "secret@example.com") || strings.Contains(all.String(), "dial tcp") {

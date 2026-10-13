@@ -13,7 +13,13 @@ import (
 	"go.uber.org/fx"
 )
 
-func get(t *testing.T, url string) (*http.Response, string) {
+// reply is the already-read part of an HTTP response.
+type reply struct {
+	StatusCode int
+	Header     http.Header
+}
+
+func get(t *testing.T, url string) (reply, string) {
 	t.Helper()
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -23,7 +29,7 @@ func get(t *testing.T, url string) (*http.Response, string) {
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 
-	return resp, string(b)
+	return reply{StatusCode: resp.StatusCode, Header: resp.Header}, string(b)
 }
 
 func TestEndpoints(t *testing.T) {

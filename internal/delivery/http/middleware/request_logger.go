@@ -11,7 +11,6 @@ import (
 	"server-template/internal/pkg/observability"
 
 	"github.com/labstack/echo/v5"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // RequestLoggerOptions configures RequestLogger.
@@ -50,16 +49,12 @@ func logRequest(logger *slog.Logger, opts RequestLoggerOptions, c *echo.Context,
 		ae = toAppError(err)
 	}
 
-	status := http.StatusOK
-	if resp, _ := echo.UnwrapResponse(c.Response()); resp != nil && resp.Status != 0 {
-		status = resp.Status
-	} else if ae != nil {
-		status = response.StatusFor(ae.Kind)
-	}
+	status := responseStatus(c, ae)
 	if status < http.StatusBadRequest && ae == nil && !opts.Debug {
 		return
 	}
 
+	// trace_id/span_id are added by the slog trace handler when OTel is on.
 	attrs := []slog.Attr{
 		slog.String("request_id", observability.CorrelationIDFromContext(ctx)),
 		slog.String("method", req.Method),
@@ -69,21 +64,8 @@ func logRequest(logger *slog.Logger, opts RequestLoggerOptions, c *echo.Context,
 		slog.String("remote_ip", c.RealIP()),
 		slog.String("user_agent", req.UserAgent()),
 	}
-	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
-		attrs = append(attrs,
-			slog.String("trace_id", sc.TraceID().String()),
-			slog.String("span_id", sc.SpanID().String()),
-		)
-	}
 
-	level := slog.LevelInfo
-	switch {
-	case ae != nil && ae.Kind.IsServerFault(), status >= http.StatusInternalServerError:
-		level = slog.LevelError
-	case ae != nil, status >= http.StatusBadRequest:
-		level = slog.LevelWarn
-	}
-
+	level := logLevel(ae, status)
 	if level >= slog.LevelWarn {
 		var body []byte
 		if info != nil {
@@ -94,6 +76,30 @@ func logRequest(logger *slog.Logger, opts RequestLoggerOptions, c *echo.Context,
 	}
 
 	logger.LogAttrs(ctx, level, "HTTP request", attrs...)
+}
+
+// responseStatus is the written status, or the one the error maps to when
+// nothing has been written yet.
+func responseStatus(c *echo.Context, ae *apperr.Error) int {
+	if resp, _ := echo.UnwrapResponse(c.Response()); resp != nil && resp.Status != 0 {
+		return resp.Status
+	}
+	if ae != nil {
+		return response.StatusFor(ae.Kind)
+	}
+
+	return http.StatusOK
+}
+
+func logLevel(ae *apperr.Error, status int) slog.Level {
+	switch {
+	case ae != nil && ae.Kind.IsServerFault(), status >= http.StatusInternalServerError:
+		return slog.LevelError
+	case ae != nil, status >= http.StatusBadRequest:
+		return slog.LevelWarn
+	default:
+		return slog.LevelInfo
+	}
 }
 
 // errorAttrs describes the error without leaking secrets: fields are shown

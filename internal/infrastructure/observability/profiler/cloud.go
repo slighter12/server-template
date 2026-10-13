@@ -1,6 +1,7 @@
 package profiler
 
 import (
+	"fmt"
 	"log/slog"
 
 	"server-template/config"
@@ -58,7 +59,7 @@ func New(params Params) error {
 
 	// 初始化 profiler
 	if err := profiler.Start(profilerConfig, clientOptions...); err != nil {
-		return err
+		return fmt.Errorf("start cloud profiler: %w", err)
 	}
 
 	params.Logger.Info("Cloud Profiler started successfully",

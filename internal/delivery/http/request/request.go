@@ -152,7 +152,7 @@ func requestFieldName(req any, fe validatorpkg.FieldError) string {
 		return strings.ToLower(fe.Field())
 	}
 	for _, tagName := range []string{"json", "query", "param", "form"} {
-		if name := tagValue(field, tagName); name != "" {
+		if name := tagValue(&field, tagName); name != "" {
 			return name
 		}
 	}
@@ -197,7 +197,7 @@ func requestStructField(req any, namespace string) (reflect.StructField, bool) {
 	return field, true
 }
 
-func tagValue(field reflect.StructField, tagName string) string {
+func tagValue(field *reflect.StructField, tagName string) string {
 	name, _, _ := strings.Cut(field.Tag.Get(tagName), ",")
 	if name == "-" {
 		return ""

@@ -175,17 +175,14 @@ type startServerParams struct {
 // started. A Serve failure shuts the whole app down (exit code 1) so OnStop
 // hooks still run. The context passed to Serve is canceled on OnStop.
 func startServer(p startServerParams) {
-	var (
-		wg     sync.WaitGroup
-		cancel context.CancelFunc
-	)
+	var wg sync.WaitGroup
+
+	// Serve outlives OnStart's own (startup-timeout) context, so it gets a
+	// dedicated one that OnStop cancels.
+	ctx, cancel := context.WithCancel(context.Background())
 
 	p.Lifecycle.Append(fx.Hook{
 		OnStart: func(context.Context) error {
-			// Serve outlives OnStart's own (startup-timeout) context.
-			var ctx context.Context
-			ctx, cancel = context.WithCancel(context.Background())
-
 			for _, d := range p.Deliveries {
 				wg.Go(func() {
 					if err := d.Serve(ctx); err != nil {
@@ -203,9 +200,7 @@ func startServer(p startServerParams) {
 			// Deliveries stop through their own OnStop hooks (graceful
 			// shutdown); the cancel only releases anything watching ctx.
 			// Not waiting on wg here: those hooks run after this one.
-			if cancel != nil {
-				cancel()
-			}
+			cancel()
 
 			return nil
 		},

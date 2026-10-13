@@ -160,7 +160,10 @@ func (c *Config) ApplyDefaults() {
 		c.Auth.AccessTokenTTL = defaultAccessTokenTTL
 	}
 
-	a := &c.Auth.Argon2
+	c.Auth.Argon2.applyDefaults()
+}
+
+func (a *Argon2Config) applyDefaults() {
 	if a.Memory == 0 {
 		a.Memory = 64 * 1024
 	}
@@ -183,6 +186,14 @@ func (c *Config) ApplyDefaults() {
 
 // Validate reports every configuration problem it finds, joined into one error.
 func (c *Config) Validate() error {
+	return errors.Join(
+		c.validateAuth(),
+		c.validateHTTP(),
+		c.validateOther(),
+	)
+}
+
+func (c *Config) validateAuth() error {
 	var errs []error
 
 	if len(c.Auth.JWTSecret) < MinJWTSecretLength {
@@ -196,18 +207,31 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("auth.argon2 parameters must all be positive"))
 	}
 
-	errs = append(errs, validPort("http.port", c.HTTP.Port), validPort("grpc.port", c.GRPC.Port))
+	return errors.Join(errs...)
+}
+
+func (c *Config) validateHTTP() error {
+	errs := []error{validPort("http.port", c.HTTP.Port)}
+
 	if c.HTTP3.Enable {
 		errs = append(errs, validPort("http3.port", c.HTTP3.Port))
-	}
-	if c.DebugServer.Enable && c.DebugServer.Addr == "" {
-		errs = append(errs, errors.New("debugServer.addr is required when debugServer.enable is true"))
 	}
 	if c.HTTP.MaxHeaderValueCount < 0 {
 		errs = append(errs, errors.New("http.maxHeaderValueCount must not be negative"))
 	}
 	if c.HTTP.RateLimit.Enable && (c.HTTP.RateLimit.RequestsPerSecond <= 0 || c.HTTP.RateLimit.Burst <= 0) {
 		errs = append(errs, errors.New("http.rateLimit requestsPerSecond and burst must be positive when enabled"))
+	}
+
+	return errors.Join(errs...)
+}
+
+// validateOther covers gRPC, RPC clients, the debug server and OTel.
+func (c *Config) validateOther() error {
+	errs := []error{validPort("grpc.port", c.GRPC.Port)}
+
+	if c.DebugServer.Enable && c.DebugServer.Addr == "" {
+		errs = append(errs, errors.New("debugServer.addr is required when debugServer.enable is true"))
 	}
 	if c.Observability.Otel.Enable {
 		errs = append(errs, validPort("observability.otel.port", c.Observability.Otel.Port))

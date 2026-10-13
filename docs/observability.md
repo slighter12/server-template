@@ -5,7 +5,8 @@
 - Domain interfaces (`UserRepository`, `AuthUseCase`, `AuthHTTPUseCase`) get generated tracing proxies: `cmd/generator` + `cmd/generator/templates/otel_proxy.tmpl`, configured by `.generator.yaml`, output in `*.gen.go`. Regenerate with `make proxy.gen`.
 - Span status is apperr-aware: every error span gets `app.error_code` and `app.error_kind`; only server faults (`Internal`, `Unavailable`) set span status Error and add an `exception` event. The error message is never stored (it may contain PII).
 - Transport spans: `echo-otel` middleware for HTTP (`server.New`), `otelgrpc` stats handlers for the gRPC server and client, so a request is one trace across the loopback hop. The `traceparent` response header exposes the trace id to clients.
-- Logs carry `trace_id` / `span_id` (`otel.NewTraceHandler`, wired only when OTel is enabled; the request logger adds them too).
+- Logs carry `trace_id` / `span_id` (`otel.NewTraceHandler`, wired only when OTel is enabled). The handler is the single source: the request logger does not add them itself, so keys are never duplicated.
+- Span names and attributes follow the stable RPC semconv emitted by `otelgrpc` 0.72: gRPC spans are named after the full method (`auth.v1.Auth/Login`), `rpc.method` holds that full method, `rpc.system.name` is `grpc`, and there is no `rpc.service`. HTTP server spans are `<METHOD> <route>` (for example `POST /auth/login`) with `http.route`. Generated proxy spans are `Interface.Method` (for example `AuthUseCase.Login`) with `code.function`.
 - Everything is off by default; with OTel disabled the proxies and middleware are not installed.
 
 ## Configuration
