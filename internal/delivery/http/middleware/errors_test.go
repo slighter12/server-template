@@ -59,7 +59,16 @@ func TestHandleErrors(t *testing.T) {
 		{name: "echo http error", method: "GET", path: "/boom", err: echo.NewHTTPError(http.StatusForbidden, "nope"),
 			wantStatus: 403, wantCode: "FORBIDDEN"},
 		{name: "unknown route", method: "GET", path: "/missing", wantStatus: 404, wantCode: "NOT_FOUND"},
-		{name: "method not allowed", method: "POST", path: "/boom", wantStatus: 400, wantCode: "METHOD_NOT_ALLOWED"},
+		{name: "method not allowed", method: "POST", path: "/boom", wantStatus: 405, wantCode: "METHOD_NOT_ALLOWED"},
+		{name: "payload too large", method: "GET", path: "/boom", err: echo.NewHTTPError(http.StatusRequestEntityTooLarge, "big"),
+			wantStatus: 413, wantCode: "PAYLOAD_TOO_LARGE"},
+		{name: "unsupported media type", method: "GET", path: "/boom", err: echo.NewHTTPError(http.StatusUnsupportedMediaType, "mt"),
+			wantStatus: 415, wantCode: "UNSUPPORTED_MEDIA_TYPE"},
+		{name: "request timeout", method: "GET", path: "/boom", err: echo.NewHTTPError(http.StatusRequestTimeout, "slow"),
+			wantStatus: 408, wantCode: "REQUEST_TIMEOUT"},
+		{name: "apperr ignores wrapped echo status", method: "GET", path: "/boom",
+			err:        apperr.Wrap(echo.NewHTTPError(http.StatusRequestEntityTooLarge, "x"), userNotFound),
+			wantStatus: 404, wantCode: "USER_NOT_FOUND"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

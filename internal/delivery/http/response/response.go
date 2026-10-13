@@ -74,9 +74,21 @@ func Success(c *echo.Context, status int, data any) error {
 // Error writes the error envelope for err. Server faults never expose their
 // message or fields, and 401/403 never expose fields.
 func Error(c *echo.Context, err error) error {
-	ae := apperr.From(err)
+	return ErrorWithStatus(c, err, 0)
+}
 
-	return c.JSON(StatusFor(ae.Kind), Envelope{Error: bodyFor(ae), Meta: metaFrom(c)})
+// ErrorWithStatus is Error with a transport-level status override. apperr
+// kinds are transport agnostic and cannot express statuses such as 405, 413,
+// 415 or 408, so the HTTP error middleware passes the status echo originally
+// chose and it wins over StatusFor. Overrides outside 400-599 are ignored.
+// The body is still derived from err by Kind, so redaction rules are unchanged.
+func ErrorWithStatus(c *echo.Context, err error, status int) error {
+	ae := apperr.From(err)
+	if status < http.StatusBadRequest || status > 599 {
+		status = StatusFor(ae.Kind)
+	}
+
+	return c.JSON(status, Envelope{Error: bodyFor(ae), Meta: metaFrom(c)})
 }
 
 func bodyFor(ae *apperr.Error) *ErrorBody {

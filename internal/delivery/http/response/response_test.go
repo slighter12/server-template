@@ -72,6 +72,29 @@ func TestErrorClientFaultKeepsFields(t *testing.T) {
 	assert.JSONEq(t, `{"error":{"code":"VALIDATION_FAILED","message":"validation failed","fields":[{"field":"email","description":"email is required"}]},"meta":{"request_id":"rid-1"}}`, rec.Body.String())
 }
 
+func TestErrorWithStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		want   int
+	}{
+		{"override wins", http.StatusMethodNotAllowed, http.StatusMethodNotAllowed},
+		{"zero falls back to kind", 0, http.StatusBadRequest},
+		{"non-error status ignored", http.StatusOK, http.StatusBadRequest},
+		{"out of range ignored", 700, http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, rec := newContext(t)
+
+			require.NoError(t, response.ErrorWithStatus(c, apperr.ErrValidationFailed, tt.status))
+
+			assert.Equal(t, tt.want, rec.Code)
+			assert.Contains(t, rec.Body.String(), `"code":"VALIDATION_FAILED"`)
+		})
+	}
+}
+
 func TestErrorRedaction(t *testing.T) {
 	fields := []apperr.FieldViolation{{Field: "x", Description: "secret detail"}}
 	tests := []struct {

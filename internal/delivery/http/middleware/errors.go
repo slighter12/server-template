@@ -11,14 +11,14 @@ import (
 	"server-template/internal/pkg/observability"
 )
 
-// HTTP-level failures that have no dedicated apperr sentinel. They are all
-// InvalidArgument so the Kind to status table in the response package stays
-// the only place that decides statuses.
+// HTTP-level failures that have no dedicated apperr sentinel. Their Kind only
+// decides redaction and logging; the real status (405/413/415/408) is carried
+// separately from echo's original error, see handleError.
 var (
 	errMethodNotAllowed = apperr.New(apperr.InvalidArgument, "METHOD_NOT_ALLOWED", "method not allowed")
 	errPayloadTooLarge  = apperr.New(apperr.InvalidArgument, "PAYLOAD_TOO_LARGE", "request body too large")
 	errUnsupportedMedia = apperr.New(apperr.InvalidArgument, "UNSUPPORTED_MEDIA_TYPE", "unsupported media type")
-	errRequestTimeout   = apperr.New(apperr.Unavailable, "REQUEST_TIMEOUT", "request timed out")
+	errRequestTimeout   = apperr.New(apperr.InvalidArgument, "REQUEST_TIMEOUT", "request timed out")
 )
 
 // HandleErrors converts every error returned by the rest of the chain into
@@ -60,12 +60,23 @@ func handleError(c *echo.Context, err error) bool {
 	if resp, _ := echo.UnwrapResponse(c.Response()); resp != nil && resp.Committed {
 		return false
 	}
-	if renderErr := response.Error(c, ae); renderErr != nil {
+	if renderErr := response.ErrorWithStatus(c, ae, transportStatus(err)); renderErr != nil {
 		logger := observability.LoggerFromContextOrDefault(c.Request().Context(), c.Logger())
 		logger.ErrorContext(c.Request().Context(), "render error response failed", "error", renderErr)
 	}
 
 	return true
+}
+
+// transportStatus returns the HTTP status of an echo-originated error (routing,
+// body limit, binding, timeouts) so it survives the Kind-based mapping. It is 0
+// for apperr errors, whose status always comes from their Kind.
+func transportStatus(err error) int {
+	if _, ok := errors.AsType[*apperr.Error](err); ok {
+		return 0
+	}
+
+	return echo.StatusCode(err)
 }
 
 // toAppError returns the *apperr.Error for err, mapping Echo's own

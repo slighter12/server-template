@@ -1,93 +1,99 @@
+// Package http2 serves the shared Echo handler over HTTP/1.1 and cleartext
+// HTTP/2 (h2c) on one TCP port. TLS is expected to terminate at a proxy.
 package http2
 
 import (
 	"context"
-	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 
+	"github.com/labstack/echo/v5"
+	"go.uber.org/fx"
+
 	"server-template/config"
-	"server-template/internal/delivery/http/common"
-	"server-template/internal/delivery/http/router"
 	"server-template/internal/domain/delivery"
 	"server-template/internal/domain/lifecycle"
-	"server-template/internal/domain/usecase"
-
-	"github.com/labstack/echo/v4"
-	"github.com/pkg/errors"
-	"go.uber.org/fx"
 )
 
-type HTTP2Params struct {
+// Params are the dependencies of New.
+type Params struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
 	Config    *config.Config
 	Logger    *slog.Logger
-	AuthUC    usecase.AuthHTTPUseCase
+	Echo      *echo.Echo
 }
 
-type http2Server struct {
-	cfg    *config.Config
+type server struct {
 	logger *slog.Logger
-	server *http.Server
+	http   *http.Server
 }
 
-func NewHTTP2(params HTTP2Params) (delivery.Delivery, error) {
-	echoServer := echo.New()
-	router.RegisterRoutes(router.RouterParams{
-		Router: echoServer,
-		Config: params.Config,
-		Logger: params.Logger,
-		AuthUC: params.AuthUC,
-	})
+// New returns the HTTP/1.1 + h2c delivery and registers its graceful shutdown
+// on the fx lifecycle. Tag it `group:"deliveries"` when wiring.
+func New(p Params) delivery.Delivery {
+	s := &server{logger: p.Logger, http: newHTTPServer(p.Config, p.Echo)}
 
-	certificates, err := common.GenerateTLSConfig()
+	p.Lifecycle.Append(fx.Hook{OnStop: s.stop})
+
+	return s
+}
+
+// newHTTPServer builds the net/http server: HTTP/1 plus unencrypted HTTP/2
+// served by the standard library (no golang.org/x/net/http2 needed).
+func newHTTPServer(cfg *config.Config, handler http.Handler) *http.Server {
+	var protocols http.Protocols
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
+		Handler:           handler,
+		Protocols:         &protocols,
+		ReadTimeout:       cfg.HTTP.Timeouts.ReadTimeout,
+		ReadHeaderTimeout: cfg.HTTP.Timeouts.ReadHeaderTimeout,
+		WriteTimeout:      cfg.HTTP.Timeouts.WriteTimeout,
+		IdleTimeout:       cfg.HTTP.Timeouts.IdleTimeout,
+	}
+	if cfg.HTTP.MaxHeaderValueCount > 0 {
+		srv.MaxHeaderValueCount = cfg.HTTP.MaxHeaderValueCount
+	}
+
+	return srv
+}
+
+// Serve blocks until the server is shut down. A clean shutdown returns nil.
+func (s *server) Serve(ctx context.Context) error {
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", s.http.Addr)
 	if err != nil {
-		return nil, errors.Wrap(err, "generate TLS config")
+		return fmt.Errorf("listen on %s: %w", s.http.Addr, err)
 	}
 
-	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", params.Config.HTTP.Port),
-		Handler:           echoServer,
-		ReadTimeout:       params.Config.HTTP.Timeouts.ReadTimeout,
-		ReadHeaderTimeout: params.Config.HTTP.Timeouts.ReadHeaderTimeout,
-		WriteTimeout:      params.Config.HTTP.Timeouts.WriteTimeout,
-		TLSConfig: &tls.Config{
-			Certificates: certificates,
-			MinVersion:   tls.VersionTLS12,
-			NextProtos:   []string{"h2"},
-		},
-	}
-
-	delivery := &http2Server{
-		cfg:    params.Config,
-		logger: params.Logger,
-		server: server,
-	}
-
-	params.Lifecycle.Append(fx.Hook{
-		OnStop: delivery.stop,
-	})
-
-	return delivery, nil
+	return s.serve(ln)
 }
 
-func (s *http2Server) Serve(ctx context.Context) error {
-	s.logger.Info("Starting HTTP/2 server", slog.Int("port", s.cfg.HTTP.Port))
-	if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return errors.Wrap(err, "failed to serve https")
+func (s *server) serve(ln net.Listener) error {
+	s.logger.Info("Starting HTTP server (HTTP/1.1 + h2c)", slog.String("addr", ln.Addr().String()))
+	if err := s.http.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("serve http: %w", err)
 	}
 
 	return nil
 }
 
-func (s *http2Server) stop(ctx context.Context) error {
-	shutdownCtx, cancel := context.WithTimeout(ctx, lifecycle.DefaultTimeout)
+func (s *server) stop(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, lifecycle.DefaultTimeout)
 	defer cancel()
 
-	s.logger.Info("Shutting down HTTP/2 server")
+	s.logger.Info("Shutting down HTTP server")
+	if err := s.http.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown http server: %w", err)
+	}
 
-	return errors.WithStack(s.server.Shutdown(shutdownCtx))
+	return nil
 }
