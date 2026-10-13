@@ -10,9 +10,6 @@ config.yaml
 # golang workspace
 go.work*
 
-# generator
-generator
-
 # docker
 docker/
 **/.env
