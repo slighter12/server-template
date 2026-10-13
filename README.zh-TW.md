@@ -11,7 +11,7 @@
 - `apperr` 統一錯誤處理與單一回應信封（[docs/api-conventions.md](docs/api-conventions.md)）。
 - OpenTelemetry：產生的 tracing proxy、`echo-otel`、`otelgrpc`、log 帶 `trace_id` / `span_id`。
 - argon2id 密碼雜湊。
-- 選配模組：HTTP/3、Redis、MySQL、MongoDB、debug server（pprof、`goroutineleak`、FlightRecorder）。
+- 強制連線：Postgres、MySQL、MongoDB、Redis（用不到的請自行刪除）。選配模組：HTTP/3、debug server（pprof、`goroutineleak`、FlightRecorder）。
 - CI：lint、race 測試、proxy 產生檔漂移檢查、govulncheck。
 
 ## Quick start
@@ -19,7 +19,7 @@
 需要 Go 1.27 與 Docker。
 
 ```sh
-docker compose up -d postgres
+docker compose up -d --wait   # postgres、mysql、mongo、redis（單節點 cluster）
 go tool goose -dir database/migrations/postgres postgres \
   "postgres://app:app@localhost:5432/app?sslmode=disable" up
 cp config/config_demo.yaml config/config.yaml
@@ -48,14 +48,24 @@ curl -s localhost:8080/api/profile -H "Authorization: Bearer $TOKEN"
 HTTP_PORT=9000 OBSERVABILITY_OTEL_ENABLE=true AUTH_JWTSECRET="$(openssl rand -base64 48)" go run ./cmd/server-template
 ```
 
-選配模組（預設值取自 `config/config.go` 與 `config/config_demo.yaml`）：
+### 連線
+
+四種連線皆為強制：`config.Validate` 要求每個區段都存在，區段缺漏或服務無法通過啟動時的 ping，app 都會啟動失敗。`docker compose up -d --wait` 會啟動與 `config/config_demo.yaml` 對應的服務。
+
+| 連線 | Config key | 使用者 | docker-compose 服務 |
+| --- | --- | --- | --- |
+| Postgres | `postgres` | user repository、交易 | `postgres`（`:5432`） |
+| Redis（cluster client） | `redis` | token 儲存與撤銷清單 | `redis`（`:6379`，單節點 cluster） |
+| MySQL | `mysql` | 目前無（僅驗證連線） | `mysql`（`:3306`） |
+| MongoDB | `mongo` | 目前無（僅驗證連線） | `mongo`（`:27017`） |
+
+沒有 `enable` 開關。要移除用不到的連線，請刪除 `cmd/server-template/main.go` 中 `injectConn` 的 provider 註冊、對應的 config 區段（及 `config.Validate` 的檢查）、docker-compose 服務，以及依賴它的 repository。
+
+其他模組（預設值取自 `config/config.go` 與 `config/config_demo.yaml`）：
 
 | 模組 | Config key | 預設值 | 說明 |
 | --- | --- | --- | --- |
 | HTTP/3 | `http3.enable`、`http3.port` | `false`、`8443` | |
-| Redis | `redis` 區段 | 不存在（關閉） | 在設定檔中取消註解；`docker compose --profile redis up -d` 可啟動一個。未啟用時，token 儲存與撤銷會被略過。 |
-| MySQL | `mysql` 區段 | 不存在（關閉） | 在設定檔中取消註解；移除區段即停用。 |
-| MongoDB | `mongo` 區段 | 不存在（關閉） | 在設定檔中取消註解。 |
 | Debug server | `debugServer.enable`、`debugServer.addr` | `false`、`127.0.0.1:6060` | pprof、`goroutineleak`、FlightRecorder；請維持在 loopback。 |
 | OpenTelemetry | `observability.otel.enable` | `false` | 見下方 Observability。 |
 | Rate limit | `http.rateLimit.enable`、`requestsPerSecond`、`burst` | `false`、`50`、`100`（demo 值） | |
@@ -68,7 +78,7 @@ docker compose --profile observability up -d   # Tempo (OTLP gRPC :4317) + Grafa
 OBSERVABILITY_OTEL_ENABLE=true go run ./cmd/server-template
 ```
 
-送出幾個請求後開啟 http://localhost:3000，進入 Explore -> Tempo，以 service name `server-template` 搜尋。`make otel-verify` 會執行腳本化的端到端檢查（[scripts/verify-otel.sh](scripts/verify-otel.sh)）；若 Postgres 與 Tempo 已可連線，`SKIP_COMPOSE=1 make otel-verify` 會略過 docker compose。其他覆蓋變數：`PG_HOST` `PG_PORT` `PG_USER` `PG_PASSWORD` `PG_DB`、`DSN`、`TEMPO_URL`、`OTLP_ENDPOINT`、`HTTP_PORT`、`GRPC_PORT`、`KEEP_COMPOSE=1`、`POLL_TIMEOUT`。詳見 [docs/observability.md](docs/observability.md)。
+送出幾個請求後開啟 http://localhost:3000，進入 Explore -> Tempo，以 service name `server-template` 搜尋。`make otel-verify` 會執行腳本化的端到端檢查（[scripts/verify-otel.sh](scripts/verify-otel.sh)）；若 Postgres、MySQL、MongoDB、Redis 與 Tempo 已可連線，`SKIP_COMPOSE=1 make otel-verify` 會略過 docker compose。其他覆蓋變數：`PG_HOST` `PG_PORT` `PG_USER` `PG_PASSWORD` `PG_DB`、`MYSQL_HOST` `MYSQL_PORT` `MYSQL_USER` `MYSQL_PASSWORD` `MYSQL_DB`、`MONGO_ADDR`、`REDIS_ADDR`、`DSN`、`TEMPO_URL`、`OTLP_ENDPOINT`、`HTTP_PORT`、`GRPC_PORT`、`KEEP_COMPOSE=1`、`POLL_TIMEOUT`。詳見 [docs/observability.md](docs/observability.md)。
 
 ## Testing & CI
 
@@ -77,9 +87,10 @@ make test-race         # go test -race
 make lint              # golangci-lint
 make modernize-check   # 列出待套用的 Go modernize 修正；必須為空
 make proxy.gen && git diff --exit-code   # 產生的 proxy 為最新
+make test-integration  # docker compose up -d --wait 後，對真實 Postgres/MySQL/MongoDB/Redis 做檢查（-tags=integration）
 ```
 
-`.github/workflows/ci.yml` 在 pull request 與推送到 `main` 時執行：golangci-lint、actionlint、`go test -race ./...`、上述 proxy 漂移檢查、govulncheck，最後建置 Docker image。
+`.github/workflows/ci.yml` 在 pull request 與推送到 `main` 時執行：golangci-lint、actionlint、`go test -race ./...`、上述 proxy 漂移檢查、govulncheck、`integration` job（`make test-integration`），最後建置 Docker image。
 
 ## Layout
 
@@ -97,7 +108,7 @@ internal/domain/       entity、錯誤、介面
 internal/repository/   Postgres repository、RPC repository、連線
 internal/infrastructure/  logging、OTel、rpc client、密碼雜湊
 internal/pkg/          apperr、observability context
-internal/test/         端到端測試（otel）
+internal/test/         端到端測試（otel、conn 整合測試）
 proto/pb/              auth.proto 與產生的程式碼
 scripts/               verify-otel.sh（供 make otel-verify 使用）
 ```

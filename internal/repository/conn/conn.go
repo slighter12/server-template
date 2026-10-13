@@ -1,4 +1,4 @@
-// Package conn holds shared helpers for the optional connection providers
+// Package conn holds shared helpers for the connection providers
 // in its sub-packages (mysql, postgres, mongo, redis).
 package conn
 

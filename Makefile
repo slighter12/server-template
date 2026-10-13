@@ -1,4 +1,4 @@
-.PHONY: help test-race lint sec-scan gci-format \
+.PHONY: help test-race test-integration lint sec-scan gci-format \
 	db-postgres-init db-postgres-seeders-init \
 	build docker-image-build \
 	db-postgres-down db-postgres-up \
@@ -20,6 +20,10 @@ GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v
 
 test-race: ## launch all tests with race detection
 	go test -p 4 ./... -cover -race
+
+test-integration: ## start postgres/mysql/mongo/redis (docker compose) and run the integration tests
+	docker compose up -d --wait postgres mysql mongo redis
+	go test -tags=integration ./internal/test/...
 
 ########
 # lint #

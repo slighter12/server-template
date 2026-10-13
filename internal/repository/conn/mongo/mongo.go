@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"server-template/config"
@@ -29,18 +30,18 @@ type Result struct {
 	Default *mongo.Client            `name:"default_mongo"`
 }
 
-// New creates MongoDB clients. MongoDB is optional: with an empty config
-// section it returns empty results and registers no lifecycle hooks.
+// New creates MongoDB clients. MongoDB is mandatory: a missing config section,
+// a creation failure or a failed OnStart ping is an error.
 func New(params Params) (Result, error) {
 	result := Result{Clients: make(map[string]*mongo.Client)}
 	if len(params.Config.Mongo) == 0 {
-		return result, nil
+		return Result{}, errors.New("mongo: config section is missing")
 	}
 
 	for _, name := range conn.SortedNames(params.Config.Mongo) {
 		client, err := mongoLib.New(params.Config.Mongo[name])
 		if err != nil {
-			return Result{Clients: make(map[string]*mongo.Client)}, fmt.Errorf("failed to create MongoDB client %s: %w", name, err)
+			return Result{}, fmt.Errorf("failed to create MongoDB client %s: %w", name, err)
 		}
 
 		params.Append(fx.Hook{

@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"server-template/config"
@@ -29,23 +30,23 @@ type Result struct {
 	Default *gorm.DB            `name:"default_mysql"`
 }
 
-// New creates MySQL clients. MySQL is optional: with an empty config section
-// it returns empty results and registers no lifecycle hooks.
+// New creates MySQL clients. MySQL is mandatory: a missing config section, a
+// creation failure or a failed OnStart ping is an error.
 func New(params Params) (Result, error) {
 	result := Result{Clients: make(map[string]*gorm.DB)}
 	if len(params.Config.Mysql) == 0 {
-		return result, nil
+		return Result{}, errors.New("mysql: config section is missing")
 	}
 
 	for _, name := range conn.SortedNames(params.Config.Mysql) {
 		db, err := mysqlLib.New(params.Config.Mysql[name])
 		if err != nil {
-			return Result{Clients: make(map[string]*gorm.DB)}, fmt.Errorf("failed to create MySQL client %s: %w", name, err)
+			return Result{}, fmt.Errorf("failed to create MySQL client %s: %w", name, err)
 		}
 
 		sqlDB, err := db.DB()
 		if err != nil {
-			return Result{Clients: make(map[string]*gorm.DB)}, fmt.Errorf("failed to get MySQL sql.DB %s: %w", name, err)
+			return Result{}, fmt.Errorf("failed to get MySQL sql.DB %s: %w", name, err)
 		}
 
 		params.Append(fx.Hook{

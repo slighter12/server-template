@@ -37,8 +37,8 @@ type gRPCServer struct {
 	tokens     *tokenManager
 }
 
-// NewGRPC builds the gRPC delivery. rdb may be nil when Redis is not configured.
-func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config, logger *slog.Logger, rdb *redis.ClusterClient) (delivery.Delivery, error) {
+// NewGRPC builds the gRPC delivery. Redis (token store and revocation list) is mandatory.
+func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config, logger *slog.Logger, rdb redis.Cmdable) (delivery.Delivery, error) {
 	server := newServer(auth, cfg, logger, rdb)
 
 	lc.Append(fx.Hook{
@@ -52,7 +52,7 @@ func NewGRPC(lc fx.Lifecycle, auth usecase.AuthUseCase, cfg *config.Config, logg
 	return server, nil
 }
 
-func newServer(auth usecase.AuthUseCase, cfg *config.Config, logger *slog.Logger, rdb *redis.ClusterClient) *gRPCServer {
+func newServer(auth usecase.AuthUseCase, cfg *config.Config, logger *slog.Logger, rdb redis.Cmdable) *gRPCServer {
 	opts := []grpc.ServerOption{grpc.ChainUnaryInterceptor(ErrorInterceptor(logger))}
 	if cfg.Observability.Otel.Enable {
 		opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))

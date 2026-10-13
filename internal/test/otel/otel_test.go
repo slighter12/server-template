@@ -35,6 +35,7 @@ import (
 	"server-template/internal/repository"
 	"server-template/internal/usecase"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/labstack/echo/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -203,6 +204,10 @@ func newHarness(t *testing.T, otelEnabled bool) *harness {
 		})
 	}
 
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
 	grpcPort := freePort(t)
 	cfg := &config.Config{}
 	cfg.Env.Env = "test"
@@ -231,7 +236,7 @@ func newHarness(t *testing.T, otelEnabled bool) *harness {
 			auth.NewArgon2idHasher,
 			rpc.New,
 			func() repo.UserRepository { return h.repo },
-			func() *redis.ClusterClient { return nil }, // Redis not configured
+			func() redis.Cmdable { return rdb },
 			usecase.NewAuthUseCase,
 			repository.NewAuthRPC,
 			usecase.NewAuthHTTPUseCase,

@@ -28,6 +28,7 @@ import (
 	"server-template/internal/repository/conn/redis"
 	"server-template/internal/usecase"
 
+	goredis "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 )
@@ -35,8 +36,8 @@ import (
 // The template demonstrates "HTTP router -> gRPC service (loopback)".
 //
 //   - Pure router (no local business logic): delete injectRepo, injectUseCase,
-//     injectGRPC (and the DB providers in injectConn you do not need). The HTTP
-//     use case then talks to a remote service through rpc.
+//     injectGRPC (and the connections in injectConn you no longer need). The
+//     HTTP use case then talks to a remote service through rpc.
 //   - Pure service (gRPC only): delete injectHTTP.
 func main() {
 	fx.New(
@@ -83,15 +84,18 @@ func injectInfra() fx.Option {
 	)
 }
 
-// injectConn provides the (optional) connections; unconfigured ones are nil or
-// empty. Delete the ones you do not use.
+// injectConn provides the connections. All of them are mandatory: a missing
+// config section, a creation failure or a failed startup ping aborts the app.
+// Delete the registration and the config section of the ones you do not use
+// (and the repositories that depend on them).
 func injectConn() fx.Option {
 	return fx.Provide(
 		mysql.New,
 		postgres.New,
-		redis.New,
+		// Consumers depend on the redis.Cmdable interface (the provider
+		// returns a cluster client).
+		fx.Annotate(redis.New, fx.As(new(goredis.Cmdable))),
 		mongo.New,
-		rpc.New, // only needed by the HTTP side (loopback / remote service)
 	)
 }
 
@@ -131,6 +135,7 @@ func injectUseCase() fx.Option {
 func injectHTTP() fx.Option {
 	return fx.Options(
 		fx.Provide(
+			rpc.New, // loopback / remote gRPC clients, only needed by the HTTP side
 			repository.NewAuthRPC,
 			usecase.NewAuthHTTPUseCase,
 			server.New,

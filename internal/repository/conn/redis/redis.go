@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"server-template/config"
@@ -20,13 +21,12 @@ type Params struct {
 	Config *config.Config
 }
 
-// New creates a Redis cluster client. Redis is optional: when the redis
-// config section is missing or has no addresses it returns (nil, nil) and
-// registers no lifecycle hooks; consumers must handle a nil client.
+// New creates a Redis cluster client. Redis is mandatory: a missing config
+// section, a creation failure or a failed OnStart ping is an error.
 func New(params Params) (*redis.ClusterClient, error) {
 	cfg := params.Config.Redis
 	if cfg == nil || len(cfg.Address) == 0 {
-		return nil, nil //nolint:nilnil // redis is optional; nil means disabled
+		return nil, errors.New("redis: config section is missing or has no address")
 	}
 
 	client, err := redisLib.New(cfg)

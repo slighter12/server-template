@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -39,12 +40,12 @@ type Result struct {
 	Default *gorm.DB            `name:"default_postgres"`
 }
 
-// New creates PostgreSQL clients. PostgreSQL is optional: with an empty config
-// section it returns empty results and registers no lifecycle hooks.
+// New creates PostgreSQL clients. PostgreSQL is mandatory: a missing config
+// section, a creation failure or a failed OnStart ping is an error.
 func New(params Params) (Result, error) {
 	result := Result{Clients: make(map[string]*gorm.DB)}
 	if len(params.Config.Postgres) == 0 {
-		return result, nil
+		return Result{}, errors.New("postgres: config section is missing")
 	}
 
 	logger := params.Logger
@@ -56,13 +57,13 @@ func New(params Params) (Result, error) {
 	for _, name := range conn.SortedNames(params.Config.Postgres) {
 		db, err := pgLib.New(params.Config.Postgres[name])
 		if err != nil {
-			return Result{Clients: make(map[string]*gorm.DB)}, fmt.Errorf("failed to create PostgreSQL client %s: %w", name, err)
+			return Result{}, fmt.Errorf("failed to create PostgreSQL client %s: %w", name, err)
 		}
 		db = db.Session(&gorm.Session{Logger: newGormSlogLogger(logger, params.Config)})
 
 		sqlDB, err := db.DB()
 		if err != nil {
-			return Result{Clients: make(map[string]*gorm.DB)}, fmt.Errorf("failed to get PostgreSQL sql.DB %s: %w", name, err)
+			return Result{}, fmt.Errorf("failed to get PostgreSQL sql.DB %s: %w", name, err)
 		}
 
 		var stopMonitor chan struct{}

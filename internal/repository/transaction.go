@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"server-template/internal/domain/repository"
@@ -27,13 +28,17 @@ type gormTransactionManager struct {
 	logger *slog.Logger
 }
 
-// NewTransactionManager builds the GORM-backed TransactionManager.
-func NewTransactionManager(db *gorm.DB, logger *slog.Logger) repository.TransactionManager {
+// NewTransactionManager builds the GORM-backed TransactionManager. A nil db is
+// an error.
+func NewTransactionManager(db *gorm.DB, logger *slog.Logger) (repository.TransactionManager, error) {
+	if db == nil {
+		return nil, errors.New("transaction manager: database connection is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	return &gormTransactionManager{db: db, logger: logger}
+	return &gormTransactionManager{db: db, logger: logger}, nil
 }
 
 // Execute implements repository.TransactionManager. A nested call reuses the

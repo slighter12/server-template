@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end OpenTelemetry check against a real Tempo.
 #
-# Flow: start postgres + tempo (docker compose, profile "observability") ->
+# Flow: start postgres, mysql, mongo, redis + tempo (docker compose, profile
+# "observability"; all four connections are mandatory for the app) ->
 # goose migrations -> run the app with OTel enabled -> register / login /
 # GET /api/profile -> read the trace id from the `traceparent` response header
 # -> poll Tempo until the trace has the expected spans and service.name.
@@ -9,10 +10,15 @@
 # Usage:  scripts/verify-otel.sh        (or: make otel-verify)
 #
 # Environment overrides (all optional):
-#   SKIP_COMPOSE=1        do not run docker compose; Postgres and Tempo must
-#                         already be reachable (used where there is no docker).
+#   SKIP_COMPOSE=1        do not run docker compose; Postgres, MySQL, Mongo,
+#                         Redis and Tempo must already be reachable (used where
+#                         there is no docker).
 #   PG_HOST PG_PORT PG_USER PG_PASSWORD PG_DB
 #                         Postgres connection (defaults: localhost 5432 app app app).
+#   MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DB
+#                         MySQL connection (defaults: localhost 3306 app app app).
+#   MONGO_ADDR            Mongo host:port (default localhost:27017).
+#   REDIS_ADDR            Redis cluster node host:port (default localhost:6379).
 #   DSN                   goose connection string (default derived from PG_*).
 #   TEMPO_URL             Tempo query API (default http://localhost:3200).
 #   OTLP_ENDPOINT         host:port of Tempo's OTLP gRPC receiver (default localhost:4317).
@@ -31,6 +37,13 @@ PG_PORT="${PG_PORT:-5432}"
 PG_USER="${PG_USER:-app}"
 PG_PASSWORD="${PG_PASSWORD:-app}"
 PG_DB="${PG_DB:-app}"
+MYSQL_HOST="${MYSQL_HOST:-localhost}"
+MYSQL_PORT="${MYSQL_PORT:-3306}"
+MYSQL_USER="${MYSQL_USER:-app}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-app}"
+MYSQL_DB="${MYSQL_DB:-app}"
+MONGO_ADDR="${MONGO_ADDR:-localhost:27017}"
+REDIS_ADDR="${REDIS_ADDR:-localhost:6379}"
 DSN="${DSN:-postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}?sslmode=disable}"
 TEMPO_URL="${TEMPO_URL:-http://localhost:3200}"
 OTLP_ENDPOINT="${OTLP_ENDPOINT:-localhost:4317}"
@@ -94,12 +107,15 @@ tcp_open() { (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null; }
 
 # 1. infrastructure ---------------------------------------------------------
 if [[ "$SKIP_COMPOSE" == "1" ]]; then
-  log "SKIP_COMPOSE=1: using existing Postgres ${PG_HOST}:${PG_PORT} and Tempo ${TEMPO_URL}"
+  log "SKIP_COMPOSE=1: using existing services (Postgres ${PG_HOST}:${PG_PORT}, MySQL ${MYSQL_HOST}:${MYSQL_PORT}, Mongo ${MONGO_ADDR}, Redis ${REDIS_ADDR}, Tempo ${TEMPO_URL})"
 else
-  log "starting postgres and tempo"
-  "${COMPOSE[@]}" up -d postgres tempo
+  log "starting postgres, mysql, mongo, redis and tempo"
+  "${COMPOSE[@]}" up -d --wait postgres mysql mongo redis tempo
 fi
 wait_for "postgres on ${PG_HOST}:${PG_PORT}" 60 tcp_open "$PG_HOST" "$PG_PORT"
+wait_for "mysql on ${MYSQL_HOST}:${MYSQL_PORT}" 60 tcp_open "$MYSQL_HOST" "$MYSQL_PORT"
+wait_for "mongo on ${MONGO_ADDR}" 60 tcp_open "${MONGO_ADDR%:*}" "${MONGO_ADDR##*:}"
+wait_for "redis on ${REDIS_ADDR}" 60 tcp_open "${REDIS_ADDR%:*}" "${REDIS_ADDR##*:}"
 wait_for "tempo ready (${TEMPO_URL}/ready)" 90 curl -fsS "${TEMPO_URL}/ready"
 wait_for "tempo OTLP receiver on ${OTLP_ENDPOINT}" 30 tcp_open "$OTLP_HOST" "$OTLP_PORT"
 
@@ -116,12 +132,26 @@ sed -E \
   -e "s/^(  port: )8080$/\1${HTTP_PORT}/" \
   -e "s/^(  port: )9090$/\1${GRPC_PORT}/" \
   -e "s#localhost:9090#localhost:${GRPC_PORT}#g" \
-  -e "s/^(      host: )\"localhost\"$/\1\"${PG_HOST}\"/" \
-  -e "s/^(      port: )\"5432\"$/\1\"${PG_PORT}\"/" \
-  -e "s/^(      username: )\"app\"$/\1\"${PG_USER}\"/" \
-  -e "s/^(      password: )\"app\"$/\1\"${PG_PASSWORD}\"/" \
-  -e "s/^(    database: )\"app\"$/\1\"${PG_DB}\"/" \
-  config/config_demo.yaml >"${WORK_DIR}/config.yaml"
+  config/config_demo.yaml |
+  awk \
+    -v pg_host="$PG_HOST" -v pg_port="$PG_PORT" -v pg_user="$PG_USER" -v pg_pass="$PG_PASSWORD" -v pg_db="$PG_DB" \
+    -v my_host="$MYSQL_HOST" -v my_port="$MYSQL_PORT" -v my_user="$MYSQL_USER" -v my_pass="$MYSQL_PASSWORD" -v my_db="$MYSQL_DB" \
+    -v mongo_addr="$MONGO_ADDR" -v redis_addr="$REDIS_ADDR" '
+    /^[a-z]/ { section = $1; sub(/:.*/, "", section) }
+    section == "postgres" && /^    database: / { print "    database: \"" pg_db "\""; next }
+    section == "postgres" && /^      host: /     { print "      host: \"" pg_host "\""; next }
+    section == "postgres" && /^      port: /     { print "      port: \"" pg_port "\""; next }
+    section == "postgres" && /^      username: / { print "      username: \"" pg_user "\""; next }
+    section == "postgres" && /^      password: / { print "      password: \"" pg_pass "\""; next }
+    section == "mysql" && /^    database: /     { print "    database: \"" my_db "\""; next }
+    section == "mysql" && /^      host: /       { print "      host: \"" my_host "\""; next }
+    section == "mysql" && /^      port: /       { print "      port: \"" my_port "\""; next }
+    section == "mysql" && /^      username: /   { print "      username: \"" my_user "\""; next }
+    section == "mysql" && /^      password: /   { print "      password: \"" my_pass "\""; next }
+    section == "mongo" && /^      - "/          { print "      - \"" mongo_addr "\""; next }
+    section == "redis" && /^    - "/            { print "    - \"" redis_addr "\""; next }
+    { print }
+  ' >"${WORK_DIR}/config.yaml"
 
 log "starting app (OTel -> ${OTLP_ENDPOINT}, http :${HTTP_PORT}, grpc :${GRPC_PORT})"
 (

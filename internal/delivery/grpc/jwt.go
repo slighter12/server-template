@@ -21,16 +21,16 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// tokenManager issues and verifies HS256 access tokens. When redis is nil
-// (Redis not configured) token storage and the revocation list are skipped.
+// tokenManager issues and verifies HS256 access tokens. Redis is mandatory: it
+// stores issued tokens and the revocation list.
 type tokenManager struct {
 	secret []byte
 	ttl    time.Duration
-	redis  *redis.ClusterClient
+	redis  redis.Cmdable
 	logger *slog.Logger
 }
 
-func newTokenManager(secret string, ttl time.Duration, rdb *redis.ClusterClient, logger *slog.Logger) *tokenManager {
+func newTokenManager(secret string, ttl time.Duration, rdb redis.Cmdable, logger *slog.Logger) *tokenManager {
 	if ttl <= 0 {
 		ttl = defaultAccessTokenTTL
 	}
@@ -41,7 +41,7 @@ func newTokenManager(secret string, ttl time.Duration, rdb *redis.ClusterClient,
 func tokenKey(token string) string     { return "token:" + token }
 func blacklistKey(token string) string { return "blacklist:" + token }
 
-// issue signs a new token and records it in Redis when available.
+// issue signs a new token and records it in Redis.
 func (m *tokenManager) issue(ctx context.Context, userID, email string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
@@ -56,10 +56,8 @@ func (m *tokenManager) issue(ctx context.Context, userID, email string) (string,
 		return "", apperr.Wrap(fmt.Errorf("sign token: %w", err), apperr.ErrInternal)
 	}
 
-	if m.redis != nil {
-		if err := m.redis.Set(ctx, tokenKey(signed), userID, m.ttl).Err(); err != nil {
-			return "", apperr.Wrap(fmt.Errorf("store token: %w", err), apperr.ErrUnavailable)
-		}
+	if err := m.redis.Set(ctx, tokenKey(signed), userID, m.ttl).Err(); err != nil {
+		return "", apperr.Wrap(fmt.Errorf("store token: %w", err), apperr.ErrUnavailable)
 	}
 
 	return signed, nil
@@ -87,9 +85,6 @@ func (m *tokenManager) revoke(ctx context.Context, tokenString string) error {
 	if err != nil {
 		return err
 	}
-	if m.redis == nil {
-		return nil
-	}
 
 	ttl := time.Until(claims.ExpiresAt.Time)
 	if ttl <= 0 {
@@ -108,10 +103,6 @@ func (m *tokenManager) revoke(ctx context.Context, tokenString string) error {
 
 // revoked reports whether the token is blacklisted.
 func (m *tokenManager) revoked(ctx context.Context, tokenString string) (bool, error) {
-	if m.redis == nil {
-		return false, nil
-	}
-
 	n, err := m.redis.Exists(ctx, blacklistKey(tokenString)).Result()
 	if err != nil {
 		return false, apperr.Wrap(fmt.Errorf("check blacklist: %w", err), apperr.ErrUnavailable)

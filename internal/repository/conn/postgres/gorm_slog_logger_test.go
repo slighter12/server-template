@@ -9,11 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"server-template/config"
-
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/fx/fxtest"
 	"gorm.io/gorm/logger"
 )
 
@@ -47,13 +43,4 @@ func TestSanitizeSQLLogString_RedactsEscapedStringLiteral(t *testing.T) {
 	assert.True(t, strings.Contains(got, "'?'"))
 	assert.NotContains(t, got, "Bob")
 	assert.NotContains(t, got, "A123")
-}
-
-func TestNew_EmptyConfigIsOptional(t *testing.T) {
-	lc := fxtest.NewLifecycle(t)
-
-	result, err := New(Params{Lifecycle: lc, Config: &config.Config{}})
-	require.NoError(t, err)
-	assert.Empty(t, result.Clients)
-	assert.Nil(t, result.Default)
 }

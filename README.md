@@ -11,7 +11,7 @@ A minimal Go microservice template: **HTTP router (Echo) -> gRPC service (loopba
 - `apperr` unified error handling and a single response envelope ([docs/api-conventions.md](docs/api-conventions.md)).
 - OpenTelemetry: generated tracing proxies, `echo-otel`, `otelgrpc`, logs carrying `trace_id` / `span_id`.
 - argon2id password hashing.
-- Optional modules: HTTP/3, Redis, MySQL, MongoDB, debug server (pprof, `goroutineleak`, FlightRecorder).
+- Mandatory connections: Postgres, MySQL, MongoDB, Redis (delete the ones you do not use). Optional modules: HTTP/3, debug server (pprof, `goroutineleak`, FlightRecorder).
 - CI: lint, race tests, generated-proxy drift check, govulncheck.
 
 ## Quick start
@@ -19,7 +19,7 @@ A minimal Go microservice template: **HTTP router (Echo) -> gRPC service (loopba
 Requires Go 1.27 and Docker.
 
 ```sh
-docker compose up -d postgres
+docker compose up -d --wait   # postgres, mysql, mongo, redis (single-node cluster)
 go tool goose -dir database/migrations/postgres postgres \
   "postgres://app:app@localhost:5432/app?sslmode=disable" up
 cp config/config_demo.yaml config/config.yaml
@@ -48,14 +48,24 @@ curl -s localhost:8080/api/profile -H "Authorization: Bearer $TOKEN"
 HTTP_PORT=9000 OBSERVABILITY_OTEL_ENABLE=true AUTH_JWTSECRET="$(openssl rand -base64 48)" go run ./cmd/server-template
 ```
 
-Optional modules (defaults from `config/config.go` and `config/config_demo.yaml`):
+### Connections
+
+All four connections are mandatory: `config.Validate` requires each section, and the app fails to start when a section is missing or a service does not answer the startup ping. `docker compose up -d --wait` starts matching services for `config/config_demo.yaml`.
+
+| Connection | Config key | Used by | docker-compose service |
+| --- | --- | --- | --- |
+| Postgres | `postgres` | user repository, transactions | `postgres` (`:5432`) |
+| Redis (cluster client) | `redis` | token store and revocation list | `redis` (`:6379`, single-node cluster) |
+| MySQL | `mysql` | nothing yet (connection check only) | `mysql` (`:3306`) |
+| MongoDB | `mongo` | nothing yet (connection check only) | `mongo` (`:27017`) |
+
+There is no `enable` flag. To drop a connection you do not use, delete its provider registration in `injectConn` (`cmd/server-template/main.go`), its config section (and its `config.Validate` check), its docker-compose service, and any repository that depends on it.
+
+Other modules (defaults from `config/config.go` and `config/config_demo.yaml`):
 
 | Module | Config key | Default | Notes |
 | --- | --- | --- | --- |
 | HTTP/3 | `http3.enable`, `http3.port` | `false`, `8443` | |
-| Redis | `redis` section | absent (off) | Uncomment in the config; `docker compose --profile redis up -d` starts one. Without it, token storage and revocation are skipped. |
-| MySQL | `mysql` section | absent (off) | Uncomment in the config; remove the section to disable. |
-| MongoDB | `mongo` section | absent (off) | Uncomment in the config. |
 | Debug server | `debugServer.enable`, `debugServer.addr` | `false`, `127.0.0.1:6060` | pprof, `goroutineleak`, FlightRecorder; keep it on loopback. |
 | OpenTelemetry | `observability.otel.enable` | `false` | See Observability below. |
 | Rate limit | `http.rateLimit.enable`, `requestsPerSecond`, `burst` | `false`, `50`, `100` (demo values) | |
@@ -68,7 +78,7 @@ docker compose --profile observability up -d   # Tempo (OTLP gRPC :4317) + Grafa
 OBSERVABILITY_OTEL_ENABLE=true go run ./cmd/server-template
 ```
 
-Send a few requests, open http://localhost:3000, then Explore -> Tempo and search by service name `server-template`. `make otel-verify` runs the scripted end-to-end check ([scripts/verify-otel.sh](scripts/verify-otel.sh)); `SKIP_COMPOSE=1 make otel-verify` skips docker compose when Postgres and Tempo are already reachable. Other overrides: `PG_HOST` `PG_PORT` `PG_USER` `PG_PASSWORD` `PG_DB`, `DSN`, `TEMPO_URL`, `OTLP_ENDPOINT`, `HTTP_PORT`, `GRPC_PORT`, `KEEP_COMPOSE=1`, `POLL_TIMEOUT`. Details: [docs/observability.md](docs/observability.md).
+Send a few requests, open http://localhost:3000, then Explore -> Tempo and search by service name `server-template`. `make otel-verify` runs the scripted end-to-end check ([scripts/verify-otel.sh](scripts/verify-otel.sh)); `SKIP_COMPOSE=1 make otel-verify` skips docker compose when Postgres, MySQL, MongoDB, Redis and Tempo are already reachable. Other overrides: `PG_HOST` `PG_PORT` `PG_USER` `PG_PASSWORD` `PG_DB`, `MYSQL_HOST` `MYSQL_PORT` `MYSQL_USER` `MYSQL_PASSWORD` `MYSQL_DB`, `MONGO_ADDR`, `REDIS_ADDR`, `DSN`, `TEMPO_URL`, `OTLP_ENDPOINT`, `HTTP_PORT`, `GRPC_PORT`, `KEEP_COMPOSE=1`, `POLL_TIMEOUT`. Details: [docs/observability.md](docs/observability.md).
 
 ## Testing & CI
 
@@ -77,9 +87,10 @@ make test-race         # go test -race
 make lint              # golangci-lint
 make modernize-check   # pending Go modernize fixes; must be empty
 make proxy.gen && git diff --exit-code   # generated proxies up to date
+make test-integration  # docker compose up -d --wait, then real Postgres/MySQL/MongoDB/Redis checks (-tags=integration)
 ```
 
-`.github/workflows/ci.yml` runs on pull requests and pushes to `main`: golangci-lint, actionlint, `go test -race ./...`, the proxy drift check above, govulncheck, then a Docker image build.
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`: golangci-lint, actionlint, `go test -race ./...`, the proxy drift check above, govulncheck, an `integration` job (`make test-integration`), then a Docker image build.
 
 ## Layout
 
@@ -97,7 +108,7 @@ internal/domain/       entities, errors, interfaces
 internal/repository/   Postgres repositories, RPC repository, connections
 internal/infrastructure/  logging, OTel, rpc clients, password hasher
 internal/pkg/          apperr, observability context
-internal/test/         end-to-end tests (otel)
+internal/test/         end-to-end tests (otel, conn integration)
 proto/pb/              auth.proto and generated code
 scripts/               verify-otel.sh (used by make otel-verify)
 ```

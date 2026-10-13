@@ -36,6 +36,12 @@ Dependency direction: delivery -> usecase -> domain <- repository / infrastructu
 - After changing such an interface (or adding one to `.generator.yaml`), run `make proxy.gen`. CI regenerates and fails on `git diff`.
 - Proxies are enabled via `fx.Decorate` in `main.go` only when `observability.otel.enable` is true. See `docs/observability.md`.
 
+## Connections
+
+- Postgres, MySQL, MongoDB and Redis are all mandatory. Each provider (`internal/repository/conn/*`) returns an error for a missing config section, a creation failure or a failed OnStart ping; there are no `enable` flags and no nil/empty results. `config.Validate` requires all four sections. The `redis` section configures a Redis Cluster client; docker-compose runs a single-node cluster.
+- To drop a connection, delete its provider in `injectConn` (`main.go`), its config section and `config.Validate` check, its docker-compose service, and every repository that depends on it.
+- `make test-integration` (`-tags=integration`, `internal/test/conn`) starts the compose services and checks all four against real servers; CI runs it in the `integration` job.
+
 ## Migrations
 
 - Files in `database/migrations/postgres/` are goose files managed by gem; add new files, never edit existing ones.
@@ -51,6 +57,7 @@ golangci-lint run ./... --config=./.golangci.yaml   # or: make lint
 make modernize-check           # go fix -diff ./...; must be empty
 make proxy.gen && git diff --exit-code   # generated proxies up to date
 make otel-verify               # OTel instrumentation check
+make test-integration          # real Postgres/MySQL/MongoDB/Redis via docker compose
 ```
 
 Docs-only changes: verify referenced paths manually.
@@ -61,13 +68,13 @@ Docs-only changes: verify referenced paths manually.
 
 ### Pure HTTP router (remote gRPC backend)
 
-1. In `main.go` remove `injectRepo()`, `injectUseCase()`, `injectGRPC()` and the imports they leave unused (`grpc`, `repository`, `usecase`/`repo` as needed). Keep `rpc.New` in `injectConn` and drop DB providers you do not use.
-2. Delete `internal/delivery/grpc/`, `internal/usecase/auth.go`, `auth.gen.go`, `auth_test.go`, `internal/domain/usecase/auth.go`, `internal/repository/{user*.go,transaction*.go,gen/,conn/}` (unused connections), `internal/domain/repository/{user.go,transaction.go}`, `internal/infrastructure/auth/`, and the `UserRepository` / `AuthUseCase` entries in `.generator.yaml` (then `make proxy.gen`).
+1. In `main.go` remove `injectRepo()`, `injectUseCase()`, `injectGRPC()` and the imports they leave unused (`grpc`, `repository`, `usecase`/`repo` as needed). Keep `rpc.New` in `injectHTTP` and drop the connection providers (and config sections) you do not use in `injectConn`.
+2. Delete `internal/delivery/grpc/`, `internal/usecase/auth.go`, `auth.gen.go`, `auth_test.go`, `internal/domain/usecase/auth.go`, `internal/repository/{user*.go,transaction*.go,gen/,conn/}` (connections you no longer use), `internal/domain/repository/{user.go,transaction.go}`, `internal/infrastructure/auth/`, and the `UserRepository` / `AuthUseCase` entries in `.generator.yaml` (then `make proxy.gen`).
 3. Point `rpc.clients.auth.target` at the remote service. Note `config.Validate` still requires `grpc.port`, `auth.*` and `rpc.server.target`; relax it in `config/config.go`.
 
 ### Pure gRPC service
 
-1. In `main.go` remove `injectHTTP()`, the HTTP/`rpc` imports, and `rpc.New` from `injectConn`.
+1. In `main.go` remove `injectHTTP()` (which also registers `rpc.New`) and the HTTP/`rpc` imports.
 2. Delete `internal/delivery/http/`, `internal/usecase/auth_http*.go`, `internal/domain/usecase/auth_http.go`, `internal/repository/auth_rpc.go`, `internal/domain/repository/auth_rpc.go`, `internal/infrastructure/rpc/`, and the `AuthHTTPUseCase` entry in `.generator.yaml` (then `make proxy.gen`).
 3. Remove now-unused config (`http*`, `rpc`) and `config.Validate` checks for them; `go mod tidy`.
 

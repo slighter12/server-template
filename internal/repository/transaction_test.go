@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"server-template/internal/domain/repository"
 	"server-template/internal/pkg/apperr"
 
 	"github.com/stretchr/testify/assert"
@@ -67,6 +68,23 @@ func newFakeDB(t *testing.T, pool *fakePool) *gorm.DB {
 	return db
 }
 
+func newTM(t *testing.T, db *gorm.DB) repository.TransactionManager {
+	t.Helper()
+
+	tm, err := NewTransactionManager(db, nil)
+	require.NoError(t, err)
+
+	return tm
+}
+
+func TestNilDBIsError(t *testing.T) {
+	_, err := NewTransactionManager(nil, nil)
+	require.Error(t, err)
+
+	_, err = NewUserRepository(nil)
+	require.Error(t, err)
+}
+
 func TestDBFromContext(t *testing.T) {
 	fallback := &gorm.DB{}
 	assert.Same(t, fallback, DBFromContext(context.Background(), fallback))
@@ -79,7 +97,7 @@ func TestDBFromContext(t *testing.T) {
 func TestExecute_CommitsAndCarriesTxInContext(t *testing.T) {
 	pool := &fakePool{}
 	db := newFakeDB(t, pool)
-	tm := NewTransactionManager(db, nil)
+	tm := newTM(t, db)
 
 	err := tm.Execute(t.Context(), func(ctx context.Context) error {
 		assert.NotSame(t, db, DBFromContext(ctx, db))
@@ -93,7 +111,7 @@ func TestExecute_CommitsAndCarriesTxInContext(t *testing.T) {
 
 func TestExecute_RollsBackOnError(t *testing.T) {
 	pool := &fakePool{}
-	tm := NewTransactionManager(newFakeDB(t, pool), nil)
+	tm := newTM(t, newFakeDB(t, pool))
 	sentinel := errors.New("boom")
 
 	err := tm.Execute(t.Context(), func(context.Context) error { return sentinel })
@@ -104,7 +122,7 @@ func TestExecute_RollsBackOnError(t *testing.T) {
 
 func TestExecute_RollsBackOnPanic(t *testing.T) {
 	pool := &fakePool{}
-	tm := NewTransactionManager(newFakeDB(t, pool), nil)
+	tm := newTM(t, newFakeDB(t, pool))
 
 	assert.PanicsWithValue(t, "oops", func() {
 		_ = tm.Execute(t.Context(), func(context.Context) error { panic("oops") })
@@ -114,7 +132,7 @@ func TestExecute_RollsBackOnPanic(t *testing.T) {
 
 func TestExecute_CommitFailureIsInternal(t *testing.T) {
 	pool := &fakePool{commitErr: errors.New("commit failed")}
-	tm := NewTransactionManager(newFakeDB(t, pool), nil)
+	tm := newTM(t, newFakeDB(t, pool))
 
 	err := tm.Execute(t.Context(), func(context.Context) error { return nil })
 	require.ErrorIs(t, err, apperr.ErrInternal)
@@ -122,7 +140,7 @@ func TestExecute_CommitFailureIsInternal(t *testing.T) {
 
 func TestExecute_BeginFailureIsInternal(t *testing.T) {
 	pool := &fakePool{beginErr: errors.New("no conn")}
-	tm := NewTransactionManager(newFakeDB(t, pool), nil)
+	tm := newTM(t, newFakeDB(t, pool))
 
 	err := tm.Execute(t.Context(), func(context.Context) error {
 		t.Fatal("fn must not run")
@@ -134,7 +152,7 @@ func TestExecute_BeginFailureIsInternal(t *testing.T) {
 
 func TestExecute_NestedReusesOuterTransaction(t *testing.T) {
 	pool := &fakePool{}
-	tm := NewTransactionManager(newFakeDB(t, pool), nil)
+	tm := newTM(t, newFakeDB(t, pool))
 
 	err := tm.Execute(t.Context(), func(ctx context.Context) error {
 		return tm.Execute(ctx, func(context.Context) error { return nil })

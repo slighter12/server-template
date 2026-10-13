@@ -18,9 +18,13 @@ type userRepository struct {
 
 // NewUserRepository builds the GORM user repository. Methods use the
 // transaction carried by ctx (see TransactionManager) when there is one,
-// otherwise db.
-func NewUserRepository(db *gorm.DB) repository.UserRepository {
-	return &userRepository{db: db}
+// otherwise db. A nil db is an error.
+func NewUserRepository(db *gorm.DB) (repository.UserRepository, error) {
+	if db == nil {
+		return nil, errors.New("user repository: database connection is required")
+	}
+
+	return &userRepository{db: db}, nil
 }
 
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {

@@ -16,6 +16,8 @@ import (
 	"server-template/internal/pkg/apperr"
 	"server-template/proto/pb/authpb"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -50,7 +52,11 @@ func setup(t *testing.T, auth *fakeAuth) (authpb.AuthClient, *grpc.ClientConn) {
 	cfg.Auth.JWTSecret = "test-secret"
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	srv := newServer(auth, cfg, logger, nil)
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	srv := newServer(auth, cfg, logger, rdb)
 	lis := bufconn.Listen(1 << 20)
 	go func() { _ = srv.serve(lis) }()
 	t.Cleanup(func() { srv.stop(context.Background()) })
@@ -87,13 +93,19 @@ func TestRegisterLoginPopulated(t *testing.T) {
 	assert.Equal(t, "u1", login.GetUser().GetId())
 	assert.NotEmpty(t, login.GetToken())
 
-	// Token works end to end without Redis configured.
+	// Token works end to end against Redis.
 	val, err := client.ValidateToken(ctx, authpb.ValidateTokenRequest_builder{Token: new(login.GetToken())}.Build())
 	require.NoError(t, err)
 	assert.Equal(t, "u1", val.GetUser().GetId())
 
 	_, err = client.Logout(ctx, authpb.LogoutRequest_builder{Token: new(login.GetToken())}.Build())
 	require.NoError(t, err)
+
+	// The logged-out token is blacklisted.
+	_, err = client.ValidateToken(ctx, authpb.ValidateTokenRequest_builder{Token: new(login.GetToken())}.Build())
+	revoked, ok := errors.AsType[*apperr.Error](err)
+	require.True(t, ok)
+	assert.Equal(t, apperr.ErrInvalidToken.Code, revoked.Code)
 
 	_, err = client.ValidateToken(ctx, authpb.ValidateTokenRequest_builder{Token: new("garbage")}.Build())
 	ae, ok := errors.AsType[*apperr.Error](err)

@@ -48,9 +48,8 @@ func New(params Params) (*Clients, error) {
 		opts = append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	}
 
-	// Nothing configured: no connections and no lifecycle hooks.
 	if len(params.Config.RPC.Clients) == 0 {
-		return rpcClients, nil
+		return nil, errors.New("rpc: config section has no clients")
 	}
 
 	// Sorted iteration keeps startup and error behavior deterministic.

@@ -24,7 +24,7 @@ Keys in `config/config_demo.yaml`, overridable by env var (key path upper-cased,
 ## Run locally
 
 ```sh
-docker compose --profile observability up -d   # Tempo (OTLP gRPC :4317) + Grafana :3000
+docker compose --profile observability up -d --wait   # Tempo (OTLP gRPC :4317) + Grafana :3000, plus the mandatory postgres/mysql/mongo/redis
 cp config/config_demo.yaml config/config.yaml
 OBSERVABILITY_OTEL_ENABLE=true go run ./cmd/server-template
 ```

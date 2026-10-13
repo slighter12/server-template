@@ -3,8 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -94,7 +96,8 @@ type Config struct {
 		} `json:"cloudProfiler" yaml:"cloudProfiler" mapstructure:"cloudProfiler"`
 	} `json:"observability" yaml:"observability" mapstructure:"observability"`
 
-	// Database sections are optional: an empty/missing section disables that connection.
+	// Connection sections are mandatory (see Validate). Delete the ones you do not
+	// use together with their provider registration in main.go.
 	Mysql    map[string]*mysql.DBConn    `json:"mysql" yaml:"mysql" mapstructure:"mysql"`
 	Postgres map[string]*postgres.DBConn `json:"postgres" yaml:"postgres" mapstructure:"postgres"`
 	Redis    *cluster.Conn               `json:"redis" yaml:"redis" mapstructure:"redis"`
@@ -190,6 +193,7 @@ func (c *Config) Validate() error {
 		c.validateAuth(),
 		c.validateHTTP(),
 		c.validateOther(),
+		c.validateConnections(),
 	)
 }
 
@@ -242,6 +246,43 @@ func (c *Config) validateOther() error {
 	for name, client := range c.RPC.Clients {
 		if client.Target == "" {
 			errs = append(errs, fmt.Errorf("rpc.clients.%s.target is required", name))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// validateConnections requires all four connection sections.
+func (c *Config) validateConnections() error {
+	errs := []error{
+		validateDBClients("postgres", c.Postgres, func(db *postgres.DBConn) bool {
+			return db.Master.Host != "" && db.Master.Port != "" && db.Database != ""
+		}, "database, master.host and master.port are required"),
+		validateDBClients("mysql", c.Mysql, func(db *mysql.DBConn) bool {
+			return db.Master.Host != "" && db.Master.Port != "" && db.Database != ""
+		}, "database, master.host and master.port are required"),
+		validateDBClients("mongo", c.Mongo, func(db *mongo.DBConn) bool {
+			return len(db.Hosts) > 0
+		}, "hosts is required"),
+	}
+
+	if c.Redis == nil || len(c.Redis.Address) == 0 {
+		errs = append(errs, errors.New("redis.address: at least one address is required"))
+	}
+
+	return errors.Join(errs...)
+}
+
+// validateDBClients requires at least one client and checks each with valid.
+func validateDBClients[T any](section string, clients map[string]*T, valid func(*T) bool, requirement string) error {
+	if len(clients) == 0 {
+		return fmt.Errorf("%s: at least one client is required", section)
+	}
+
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(clients)) {
+		if db := clients[name]; db == nil || !valid(db) {
+			errs = append(errs, fmt.Errorf("%s.%s: %s", section, name, requirement))
 		}
 	}
 

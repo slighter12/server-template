@@ -6,6 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/slighter12/go-lib/database/mongo"
+	"github.com/slighter12/go-lib/database/mysql"
+	"github.com/slighter12/go-lib/database/postgres"
+	"github.com/slighter12/go-lib/database/redis/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,6 +19,10 @@ const testSecret = "0123456789abcdef0123456789abcdef"
 func validConfig() *Config {
 	cfg := &Config{}
 	cfg.Auth.JWTSecret = testSecret
+	cfg.Postgres = map[string]*postgres.DBConn{"main": {Database: "app", Master: postgres.ConnectionConfig{Host: "h", Port: "1"}}}
+	cfg.Mysql = map[string]*mysql.DBConn{"main": {Database: "app", Master: mysql.ConnectionConfig{Host: "h", Port: "1"}}}
+	cfg.Mongo = map[string]*mongo.DBConn{"main": {Hosts: []string{"h:1"}}}
+	cfg.Redis = &cluster.Conn{Address: []string{"h:1"}}
 	cfg.ApplyDefaults()
 
 	return cfg
@@ -60,6 +68,14 @@ func TestValidate(t *testing.T) {
 		{"bad http3 port only when enabled", func(c *Config) { c.HTTP3.Enable = true; c.HTTP3.Port = 0 }, "http3.port"},
 		{"empty rpc target", func(c *Config) { c.RPC.Server.Target = "" }, "rpc.server.target"},
 		{"rate limit incomplete", func(c *Config) { c.HTTP.RateLimit.Enable = true }, "http.rateLimit"},
+		{"postgres missing", func(c *Config) { c.Postgres = nil }, "postgres"},
+		{"postgres no host", func(c *Config) { c.Postgres["main"].Master.Host = "" }, "postgres.main"},
+		{"mysql missing", func(c *Config) { c.Mysql = nil }, "mysql"},
+		{"mysql no database", func(c *Config) { c.Mysql["main"].Database = "" }, "mysql.main"},
+		{"mongo missing", func(c *Config) { c.Mongo = nil }, "mongo"},
+		{"mongo no hosts", func(c *Config) { c.Mongo["main"].Hosts = nil }, "mongo.main: hosts"},
+		{"redis missing", func(c *Config) { c.Redis = nil }, "redis"},
+		{"redis no address", func(c *Config) { c.Redis.Address = nil }, "redis"},
 		{"argon2 zero", func(c *Config) { c.Auth.Argon2.MaxConcurrent = 0 }, "auth.argon2"},
 	}
 	for _, tt := range tests {
@@ -96,6 +112,14 @@ func TestNew_EnvOverridesYAML(t *testing.T) {
 		"  otel:",
 		"    enable: false",
 		"    port: 4317",
+		"postgres:",
+		"  main: {database: app, master: {host: h, port: '1'}}",
+		"mysql:",
+		"  main: {database: app, master: {host: h, port: '1'}}",
+		"mongo:",
+		"  main: {hosts: ['h:1']}",
+		"redis:",
+		"  address: ['h:1']",
 		"",
 	}, "\n")
 	require.NoError(t, os.WriteFile(dir+"/config.yaml", []byte(yaml), 0o600))
@@ -141,7 +165,9 @@ func TestDemoConfigIsValid(t *testing.T) {
 	assert.Equal(t, 9090, cfg.GRPC.Port)
 	assert.Equal(t, "otlp-grpc", cfg.Observability.Otel.Exporter)
 	assert.Contains(t, cfg.Postgres, "main")
-	assert.Empty(t, cfg.Mysql)
-	assert.Nil(t, cfg.Redis)
+	assert.Contains(t, cfg.Mysql, "main")
+	assert.Contains(t, cfg.Mongo, "main")
+	require.NotNil(t, cfg.Redis)
+	assert.Equal(t, []string{"localhost:6379"}, cfg.Redis.Address)
 	assert.Equal(t, "localhost:9090", cfg.RPC.Clients["auth"].Target)
 }

@@ -61,7 +61,10 @@ observability:
     port: 4317
     isSecure: false
 
-# Database sections are optional. Remove a section to disable that connection.
+# Connections are mandatory: the app fails to start when one is missing or
+# unreachable. Delete the ones you do not use together with their provider in
+# cmd/server-template/main.go (and the repositories that depend on them).
+# The defaults below match docker-compose.yml (`docker compose up -d --wait`).
 postgres:
   main:
     database: "app"
@@ -73,50 +76,45 @@ postgres:
       port: "5432"
       username: "app"
       password: "app"
+    maxIdleConns: 25
+    maxOpenConns: 50
+    connMaxLifetime: "5m"
+
+mysql:
+  main:
+    database: "app"
+    master:
+      host: "localhost"
+      port: "3306"
+      username: "app"
+      password: "app"
+      loc: "Local"
       timeout: "10s"
     maxIdleConns: 25
     maxOpenConns: 50
     connMaxLifetime: "5m"
 
-# --- uncomment to enable ---
-# mysql:
-#   main:
-#     database: "your_main_db"
-#     master:
-#       host: "localhost"
-#       port: "3306"
-#       username: "user"
-#       password: "password"
-#       loc: "Local"
-#       timeout: "10s"
-#     replicas:
-#       - host: "replica.db.example.com"
-#         port: "3306"
-#         username: "readonly_user"
-#         password: "password"
-#         loc: "Local"
-#         timeout: "10s"
-#     maxIdleConns: 25
-#     maxOpenConns: 50
-#     connMaxLifetime: "5m"
-#
-# mongo:
-#   main:
-#     # see github.com/slighter12/go-lib/database/mongo DBConn
-#
-# redis:
-#   address:
-#     - "localhost:7001"
-#     - "localhost:7002"
-#     - "localhost:7003"
-#   password: "yourpassword"
-#   poolSize: 10
-#   minIdleConns: 5
-#   maxIdleConns: 10
-#   connMaxIdleTime: "30m"
-#   dialTimeout: "10s"
-#   readTimeout: "10s"
-#   writeTimeout: "10s"
+mongo:
+  main:
+    hosts:
+      - "localhost:27017"
+    username: ""
+    password: ""
+    authDB: "admin"
+    connectTimeout: "10s"
+
+# Redis is used in cluster mode (docker-compose runs a single-node cluster).
+redis:
+  address:
+    - "localhost:6379"
+  password: ""
+  poolSize: 10
+  minIdleConns: 5
+  maxIdleConns: 10
+  connMaxIdleTime: "30m"
+  dialTimeout: "10s"
+  readTimeout: "10s"
+  writeTimeout: "10s"
 
 rpc:
   server:
