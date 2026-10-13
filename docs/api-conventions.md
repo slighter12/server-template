@@ -73,6 +73,10 @@ Inbound extras mapped to a kind by the client: OutOfRange -> InvalidArgument, Ab
 
 `apperr.FieldViolation{Field, Description}`, attached with `err.WithFields(...)`. `request.Bind*` produces `VALIDATION_FAILED` with one violation per failed validator rule; malformed input yields `INVALID_INPUT` (400). Password bounds are in `RegisterRequest` tags and `entity`; strength is checked in the usecase (`WEAK_PASSWORD`).
 
+## Email
+
+Emails are case-insensitive. The auth usecase normalizes them with `entity.NormalizeEmail` (trim + lower-case) before lookup and insert, so `Foo@Example.com` and `foo@example.com` are the same account (registering both returns `EMAIL_TAKEN`, 409; login works with any casing). The database enforces it with the unique index `udx_users_email_lower` on `lower(email)`. Request validation caps emails at 254 characters (RFC 5321).
+
 ## Headers
 
 - `X-Request-Id`: an inbound value is reused if 1-128 chars of `[A-Za-z0-9-_.:]`, otherwise a UUIDv7 is generated. It is echoed in the response header, in `meta.request_id`, and in every log line for the request.
