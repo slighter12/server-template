@@ -64,7 +64,7 @@ func recordAuthUseCaseProxyError(span trace.Span, err error) {
 	))
 }
 
-func (p *AuthUseCaseProxy) Register(ctx context.Context, email string, hashedPassword string) (*entity.User, error) {
+func (p *AuthUseCaseProxy) Register(ctx context.Context, email string, password string) (*entity.User, error) {
 	ctx, span := p.tracer.Start(ctx, "AuthUseCase.Register",
 		trace.WithAttributes(
 			attribute.String("code.function", "Register"),
@@ -73,7 +73,7 @@ func (p *AuthUseCaseProxy) Register(ctx context.Context, email string, hashedPas
 	)
 	defer span.End()
 
-	ret0, err := p.base.Register(ctx, email, hashedPassword)
+	ret0, err := p.base.Register(ctx, email, password)
 	if err != nil {
 		recordAuthUseCaseProxyError(span, err)
 	}
@@ -81,7 +81,7 @@ func (p *AuthUseCaseProxy) Register(ctx context.Context, email string, hashedPas
 	return ret0, err
 }
 
-func (p *AuthUseCaseProxy) Login(ctx context.Context, email string, hashedPassword string) (*entity.User, error) {
+func (p *AuthUseCaseProxy) Login(ctx context.Context, email string, password string) (*entity.User, error) {
 	ctx, span := p.tracer.Start(ctx, "AuthUseCase.Login",
 		trace.WithAttributes(
 			attribute.String("code.function", "Login"),
@@ -90,7 +90,7 @@ func (p *AuthUseCaseProxy) Login(ctx context.Context, email string, hashedPasswo
 	)
 	defer span.End()
 
-	ret0, err := p.base.Login(ctx, email, hashedPassword)
+	ret0, err := p.base.Login(ctx, email, password)
 	if err != nil {
 		recordAuthUseCaseProxyError(span, err)
 	}

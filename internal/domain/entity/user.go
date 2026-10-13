@@ -3,103 +3,63 @@ package entity
 import (
 	"net/mail"
 	"time"
+	"unicode"
 
 	"server-template/internal/domain/entity/user"
-
-	"github.com/pkg/errors"
-	"golang.org/x/crypto/bcrypt"
+	"server-template/internal/pkg/apperr"
 )
 
-// User 代表使用者實體
+// MinPasswordLength and MaxPasswordLength bound a plaintext password in bytes.
+// 72 matches the limit of common password hashes and the HTTP validate tags.
+const (
+	MinPasswordLength = 8
+	MaxPasswordLength = 72
+)
+
+// User 代表使用者實體。
+//
+// The password column holds an encoded password hash (argon2id PHC string,
+// roughly 100 characters), never plaintext; hashing is done by service.PasswordHasher.
 type User struct {
 	ID        string          `json:"id" gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-	Name      string          `json:"name" gorm:"type:varchar(32);not null"`
+	Name      string          `json:"name" gorm:"type:varchar(32);not null;default:''"`
 	Email     string          `json:"email" gorm:"type:varchar(255);uniqueIndex;not null"` // RFC 5322 標準規定 email 最大長度為 255 字元
-	Password  string          `json:"password" gorm:"type:varchar(60);not null"`           // Password 欄位使用 varchar(60) 是因為 bcrypt 使用 DefaultCost (cost=10) 時，加密後的密碼長度固定為 60 字元
-	Status    user.UserStatus `json:"status" gorm:"type:integer;not null;default:1"`
+	Password  string          `json:"-" gorm:"type:varchar(255);not null"`                 // encoded hash, 255 leaves room for argon2id PHC strings and parameter changes
+	Status    user.UserStatus `json:"status" gorm:"type:integer;not null;default:1"`       // default must equal user.UserStatusActive
 	CreatedAt time.Time       `json:"created_at" gorm:"type:timestamp with time zone;not null;default:CURRENT_TIMESTAMP"`
 	UpdatedAt time.Time       `json:"updated_at" gorm:"type:timestamp with time zone;not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
 }
 
+// Validate checks the profile fields (not the password).
 func (u *User) Validate() error {
-	if u.Email == "" {
-		return errors.New("email is required")
-	}
-
 	if _, err := mail.ParseAddress(u.Email); err != nil {
-		return errors.New("invalid email format")
+		return apperr.ErrInvalidInput.WithMessage("invalid email format")
 	}
 
 	if len(u.Name) > 32 {
-		return errors.New("name must be less than 32 characters")
-	}
-
-	return u.validatePassword()
-}
-
-func (u *User) validatePassword() error {
-	if len(u.Password) < 8 {
-		return errors.New("password must be at least 8 characters long")
-	}
-	if len(u.Password) > 128 {
-		return errors.New("password must be less than 128 characters")
-	}
-
-	return u.validatePasswordComplexity()
-}
-
-func (u *User) validatePasswordComplexity() error {
-	var (
-		hasUpper   bool
-		hasLower   bool
-		hasNumber  bool
-		hasSpecial bool
-	)
-
-	for _, char := range u.Password {
-		hasUpper = hasUpper || isUpperCase(char)
-		hasLower = hasLower || isLowerCase(char)
-		hasNumber = hasNumber || isNumber(char)
-		hasSpecial = hasSpecial || isSpecialChar(char)
-	}
-
-	if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
-		return errors.New("password must contain at least one uppercase letter, one lowercase letter, one number, and one special character")
+		return apperr.ErrInvalidInput.WithMessage("name must be at most 32 characters")
 	}
 
 	return nil
 }
 
-func isUpperCase(char rune) bool {
-	return char >= 'A' && char <= 'Z'
-}
-
-func isLowerCase(char rune) bool {
-	return char >= 'a' && char <= 'z'
-}
-
-func isNumber(char rune) bool {
-	return char >= '0' && char <= '9'
-}
-
-// isSpecialChar 檢查是否為特殊符號，包含以下範圍：
-// - ! " # $ % & ' ( ) * + , - . /  (ASCII 33-47)
-// - : ; < = > ? @                  (ASCII 58-64)
-// - [ \ ] ^ _ `                    (ASCII 91-96)
-// - { | } ~                        (ASCII 123-126)
-func isSpecialChar(char rune) bool {
-	return (char >= '!' && char <= '/') ||
-		(char >= ':' && char <= '@') ||
-		(char >= '[' && char <= '`') ||
-		(char >= '{' && char <= '~')
-}
-
-func (u *User) HashPassword() error {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return errors.Wrap(err, "failed to hash password")
+// ValidatePassword is the single password-strength rule: 8 to 72 bytes with at
+// least one upper case letter, one lower case letter and one digit. Violations
+// return ErrWeakPassword.
+func ValidatePassword(password string) error {
+	if len(password) < MinPasswordLength || len(password) > MaxPasswordLength {
+		return ErrWeakPassword
 	}
-	u.Password = string(hashedPassword)
+
+	var upper, lower, digit bool
+	for _, r := range password {
+		upper = upper || unicode.IsUpper(r)
+		lower = lower || unicode.IsLower(r)
+		digit = digit || unicode.IsDigit(r)
+	}
+	if !upper || !lower || !digit {
+		return ErrWeakPassword
+	}
 
 	return nil
 }
