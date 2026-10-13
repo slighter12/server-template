@@ -13,6 +13,7 @@ linters:
     - durationcheck
     - errcheck
     - errorlint
+    - forbidigo
     - gochecknoglobals
     - gochecknoinits
     - goconst
@@ -41,6 +42,16 @@ linters:
     - whitespace
     - wrapcheck
   settings:
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print(f|ln)?$
+          pkg: ^server-template/internal/
+        - pattern: ^log\.Print(f|ln)?$
+          pkg: ^server-template/internal/
+        - pattern: ^log\.Fatal(f|ln)?$
+          pkg: ^server-template/internal/
+        - pattern: ^log\.Panic(f|ln)?$
+          pkg: ^server-template/internal/
     gocognit:
       min-complexity: 20
     gocritic:
@@ -63,6 +74,8 @@ linters:
     gosec:
       excludes:
         - G115
+        - G117
+        - G704
     lll:
       line-length: 100
       tab-width: 4
@@ -76,11 +89,19 @@ linters:
       ignore-names:
         - in
         - db
+        - fn
       ignore-decls:
-        - lc fx.Lifecycle
         - ok bool
         - c echo.Context
         - q *query.Query
+        - tx *gorm.DB
+        - e *echo.Echo
+        - lc fx.Lifecycle
+    wrapcheck:
+      ignore-package-globs:
+        - github.com/labstack/echo/v4
+        - server-template/internal/pkg/apperr
+        - github.com/slighter12/go-lib/errors/stack
   exclusions:
     generated: lax
     presets:
@@ -90,13 +111,19 @@ linters:
       - std-error-handling
     rules:
       - linters:
+          - gocritic
+        text: "hugeParam"
+        source: "func New[A-Za-z]+\\(params [A-Za-z]+Params\\)"
+      - linters:
           - contextcheck
           - cyclop
+          - errcheck
           - funlen
           - gocognit
           - goconst
           - gocritic
           - lll
+          - unparam
           - varnamelen
           - wrapcheck
         path: _test\.go
@@ -108,11 +135,19 @@ linters:
         path: internal/delivery/http/validator/.*\.go
       - linters:
           - lll
-        source: '^//go:generate '
+        source: "^//go:generate "
+      - linters:
+          - gosec
+        excludes:
+          - G404
+        path: _test.go
     paths:
       - cmd/generator
+      - cmd/generator/testdata
       - cmd/gen
       - internal/repository/gen
+      - proto/
+      - .*\.gen\.go$
       - third_party$
       - builtin$
       - examples$
@@ -132,8 +167,11 @@ formatters:
     generated: lax
     paths:
       - cmd/generator
+      - cmd/generator/testdata
       - cmd/gen
       - internal/repository/gen
+      - proto/
+      - .*\.gen\.go$
       - third_party$
       - builtin$
       - examples$
