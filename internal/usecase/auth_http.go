@@ -7,8 +7,6 @@ import (
 	"server-template/internal/domain/repository"
 	"server-template/internal/domain/usecase"
 	"server-template/proto/pb/authpb"
-
-	"github.com/pkg/errors"
 )
 
 type authHTTPUseCase struct {
@@ -21,99 +19,49 @@ func NewAuthHTTPUseCase(authRPC repository.AuthRPCRepository) usecase.AuthHTTPUs
 	}
 }
 
+// Errors returned by the RPC client are already *apperr.Error (restored by the
+// client interceptor), so they are returned untouched.
+
 func (uc *authHTTPUseCase) Register(ctx context.Context, email, password string) (string, *entity.User, error) {
-	// 創建 gRPC 請求
-	grpcReq := &authpb.RegisterRequest{}
-	grpcReq.SetEmail(email)
-	grpcReq.SetPassword(password)
-
-	// 調用 gRPC 服務
-	resp, err := uc.authRPC.Register(ctx, grpcReq)
+	resp, err := uc.authRPC.Register(ctx, authpb.RegisterRequest_builder{Email: &email, Password: &password}.Build())
 	if err != nil {
-		return "", nil, errors.Wrap(err, "failed to register user")
+		return "", nil, err
 	}
 
-	// 檢查 gRPC 響應狀態
-	if resp.GetStatus().GetCode() != int32(0) {
-		return "", nil, errors.New(resp.GetStatus().GetMessage())
-	}
-
-	// 通過 gRPC 生成 token
-	tokenReq := &authpb.GenerateTokenRequest{}
-	tokenReq.SetUserId(resp.GetUser().GetId())
-	tokenReq.SetEmail(resp.GetUser().GetEmail())
-
-	tokenResp, err := uc.authRPC.GenerateToken(ctx, tokenReq)
+	tokenResp, err := uc.authRPC.GenerateToken(ctx, authpb.GenerateTokenRequest_builder{
+		UserId: new(resp.GetUser().GetId()),
+		Email:  new(resp.GetUser().GetEmail()),
+	}.Build())
 	if err != nil {
-		return "", nil, errors.Wrap(err, "failed to generate token")
+		return "", nil, err
 	}
 
-	// 創建用戶實體
-	user := &entity.User{
-		ID:        resp.GetUser().GetId(),
-		Email:     resp.GetUser().GetEmail(),
-		CreatedAt: resp.GetUser().GetCreatedAt().AsTime(),
-	}
-
-	return tokenResp.GetToken(), user, nil
+	return tokenResp.GetToken(), userFromPB(resp.GetUser()), nil
 }
 
 func (uc *authHTTPUseCase) Login(ctx context.Context, email, password string) (string, *entity.User, error) {
-	// 創建 gRPC 請求
-	grpcReq := &authpb.LoginRequest{}
-	grpcReq.SetEmail(email)
-	grpcReq.SetPassword(password)
-
-	// 調用 gRPC 服務
-	resp, err := uc.authRPC.Login(ctx, grpcReq)
+	resp, err := uc.authRPC.Login(ctx, authpb.LoginRequest_builder{Email: &email, Password: &password}.Build())
 	if err != nil {
-		return "", nil, errors.Wrap(err, "failed to login user")
+		return "", nil, err
 	}
 
-	// 檢查 gRPC 響應狀態
-	if resp.GetStatus().GetCode() != int32(0) {
-		return "", nil, errors.New(resp.GetStatus().GetMessage())
-	}
-
-	// 創建用戶實體
-	user := &entity.User{
-		ID:        resp.GetUser().GetId(),
-		Email:     resp.GetUser().GetEmail(),
-		CreatedAt: resp.GetUser().GetCreatedAt().AsTime(),
-	}
-
-	return resp.GetToken(), user, nil
+	return resp.GetToken(), userFromPB(resp.GetUser()), nil
 }
 
 func (uc *authHTTPUseCase) Logout(ctx context.Context, token string) error {
-	// 創建 gRPC 請求
-	grpcReq := &authpb.LogoutRequest{}
-	grpcReq.SetToken(token)
+	_, err := uc.authRPC.Logout(ctx, authpb.LogoutRequest_builder{Token: &token}.Build())
 
-	// 調用 gRPC 服務
-	resp, err := uc.authRPC.Logout(ctx, grpcReq)
-	if err != nil {
-		return errors.Wrap(err, "failed to logout user")
-	}
-
-	// 檢查 gRPC 響應狀態
-	if resp.GetStatus().GetCode() != int32(0) {
-		return errors.New(resp.GetStatus().GetMessage())
-	}
-
-	return nil
+	return err
 }
 
 func (uc *authHTTPUseCase) ValidateToken(ctx context.Context, token string) (*authpb.ValidateTokenResponse, error) {
-	// 創建 gRPC 請求
-	grpcReq := &authpb.ValidateTokenRequest{}
-	grpcReq.SetToken(token)
+	return uc.authRPC.ValidateToken(ctx, authpb.ValidateTokenRequest_builder{Token: &token}.Build())
+}
 
-	// 調用 gRPC 服務
-	resp, err := uc.authRPC.ValidateToken(ctx, grpcReq)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to validate token")
+func userFromPB(u *authpb.User) *entity.User {
+	return &entity.User{
+		ID:        u.GetId(),
+		Email:     u.GetEmail(),
+		CreatedAt: u.GetCreatedAt().AsTime(),
 	}
-
-	return resp, nil
 }
