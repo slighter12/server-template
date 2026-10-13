@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"log/slog"
-	"os"
+	"sync"
 
 	"server-template/config"
+	"server-template/internal/delivery/debug"
 	"server-template/internal/delivery/grpc"
 	"server-template/internal/delivery/http/http2"
 	"server-template/internal/delivery/http/http3"
+	"server-template/internal/delivery/http/router"
+	"server-template/internal/delivery/http/server"
 	"server-template/internal/domain/delivery"
 	repo "server-template/internal/domain/repository"
 	use "server-template/internal/domain/usecase"
+	"server-template/internal/infrastructure/auth"
 	"server-template/internal/infrastructure/logs"
 	"server-template/internal/infrastructure/observability/otel"
 	"server-template/internal/infrastructure/observability/profiler"
@@ -25,59 +29,84 @@ import (
 	"server-template/internal/usecase"
 
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 )
 
-type startServerParams struct {
-	fx.In
-	fx.Lifecycle
-
-	Deliveries []delivery.Delivery `group:"deliveries"`
-}
-
+// The template demonstrates "HTTP router -> gRPC service (loopback)".
+//
+//   - Pure router (no local business logic): delete injectRepo, injectUseCase,
+//     injectGRPC (and the DB providers in injectConn you do not need). The HTTP
+//     use case then talks to a remote service through rpc.
+//   - Pure service (gRPC only): delete injectHTTP.
 func main() {
 	fx.New(
+		fx.WithLogger(newFxLogger),
 		injectInfra(),
 		injectConn(),
 		injectRepo(),
-		injectUse(),
-		injectDelivery(),
+		injectUseCase(),
+		injectHTTP(),
+		injectGRPC(),
+		injectDebug(),
 		fx.Invoke(
+			logStartup,
 			pyroscope.New,
-			otel.New,
+			func(p otel.Params) error { return otel.New(context.Background(), p) },
 			profiler.New,
 			startServer,
 		),
 	).Run()
 }
 
+// newFxLogger routes fx's own lifecycle events to slog at debug level.
+func newFxLogger(logger *slog.Logger) fxevent.Logger {
+	l := &fxevent.SlogLogger{Logger: logger}
+	l.UseLogLevel(slog.LevelDebug)
+
+	return l
+}
+
+// injectInfra provides config and logging. Keep it.
 func injectInfra() fx.Option {
 	return fx.Provide(
 		config.New,
 		logs.New,
-		context.Background,
+		// Adds trace_id/span_id to log records, only when OTel is enabled.
+		func(cfg *config.Config) func(slog.Handler) slog.Handler {
+			if !cfg.Observability.Otel.Enable {
+				return nil
+			}
+
+			return otel.NewTraceHandler
+		},
+		auth.NewArgon2idHasher,
 	)
 }
 
+// injectConn provides the (optional) connections; unconfigured ones are nil or
+// empty. Delete the ones you do not use.
 func injectConn() fx.Option {
-	return fx.Options(
-		fx.Provide(
-			// 創建數據庫連線
-			mysql.New,
-			postgres.New,
-			redis.New,
-			mongo.New,
-			rpc.New,
-		),
+	return fx.Provide(
+		mysql.New,
+		postgres.New,
+		redis.New,
+		mongo.New,
+		rpc.New, // only needed by the HTTP side (loopback / remote service)
 	)
 }
 
+// injectRepo provides the persistence layer used by the gRPC side.
 func injectRepo() fx.Option {
 	return fx.Options(
 		fx.Provide(
-			repository.NewAuthRPC,
 			fx.Annotate(
 				repository.NewUserRepository,
 				fx.ParamTags(`name:"default_postgres"`),
+			),
+			fx.Annotate(
+				repository.NewTransactionManager,
+				fx.ParamTags(`name:"default_postgres"`, ``),
+				fx.As(new(repo.TransactionManager)),
 			),
 		),
 		fx.Decorate(func(cfg *config.Config, base repo.UserRepository) repo.UserRepository {
@@ -86,44 +115,99 @@ func injectRepo() fx.Option {
 	)
 }
 
-func injectUse() fx.Option {
+// injectUseCase provides the business logic served by gRPC.
+func injectUseCase() fx.Option {
 	return fx.Options(
-		fx.Provide(
-			usecase.NewAuthUseCase,
-			usecase.NewAuthHTTPUseCase,
-		),
+		fx.Provide(usecase.NewAuthUseCase),
 		fx.Decorate(func(cfg *config.Config, base use.AuthUseCase) use.AuthUseCase {
 			return usecase.ProvideAuthUseCaseProxy(cfg.Observability.Otel.Enable, base)
 		}),
 	)
 }
 
-func injectDelivery() fx.Option {
+// injectHTTP is the HTTP layer: router, echo server, h2c and HTTP/3 deliveries,
+// and the HTTP use case that calls the gRPC service. Delete this group to get a
+// pure gRPC service.
+func injectHTTP() fx.Option {
 	return fx.Options(
 		fx.Provide(
+			repository.NewAuthRPC,
+			usecase.NewAuthHTTPUseCase,
+			server.New,
 			fx.Annotate(
-				http2.NewHTTP2,
-				fx.ResultTags(`group:"deliveries"`),
+				router.New,
+				fx.As(new(server.RouteRegistrar)),
+				fx.ResultTags(`group:"http_routes"`),
 			),
-			fx.Annotate(
-				http3.NewHTTP3,
-				fx.ResultTags(`group:"deliveries"`),
-			),
-			fx.Annotate(
-				grpc.NewGRPC,
-				fx.ResultTags(`group:"deliveries"`),
-			),
+			fx.Annotate(http2.New, fx.ResultTags(`group:"deliveries"`)),
+			fx.Annotate(http3.New, fx.ResultTags(`group:"deliveries"`)),
 		),
+		fx.Decorate(func(cfg *config.Config, base use.AuthHTTPUseCase) use.AuthHTTPUseCase {
+			return usecase.ProvideAuthHTTPUseCaseProxy(cfg.Observability.Otel.Enable, base)
+		}),
 	)
 }
 
-func startServer(ctx context.Context, params startServerParams) {
-	for _, delivery := range params.Deliveries {
-		go func() {
-			if err := delivery.Serve(ctx); err != nil {
-				slog.Error("Failed to start server", slog.Any("error", err))
-				os.Exit(1)
+// injectGRPC is the gRPC layer. Delete this group to get a pure HTTP router.
+func injectGRPC() fx.Option {
+	return fx.Provide(
+		fx.Annotate(grpc.NewGRPC, fx.ResultTags(`group:"deliveries"`)),
+	)
+}
+
+// injectDebug is the optional debug server (pprof, flight recorder).
+func injectDebug() fx.Option {
+	return fx.Provide(
+		fx.Annotate(debug.NewDebugServer, fx.ResultTags(`group:"deliveries"`)),
+	)
+}
+
+type startServerParams struct {
+	fx.In
+
+	Lifecycle  fx.Lifecycle
+	Shutdowner fx.Shutdowner
+	Logger     *slog.Logger
+	Deliveries []delivery.Delivery `group:"deliveries"`
+}
+
+// startServer runs every delivery in its own goroutine once the app has
+// started. A Serve failure shuts the whole app down (exit code 1) so OnStop
+// hooks still run. The context passed to Serve is cancelled on OnStop.
+func startServer(p startServerParams) {
+	var (
+		wg     sync.WaitGroup
+		cancel context.CancelFunc
+	)
+
+	p.Lifecycle.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			// Serve outlives OnStart's own (startup-timeout) context.
+			var ctx context.Context
+			ctx, cancel = context.WithCancel(context.Background())
+
+			for _, d := range p.Deliveries {
+				wg.Go(func() {
+					if err := d.Serve(ctx); err != nil {
+						p.Logger.Error("delivery stopped with error", slog.Any("error", err))
+						if sErr := p.Shutdowner.Shutdown(fx.ExitCode(1)); sErr != nil {
+							p.Logger.Error("shutdown failed", slog.Any("error", sErr))
+						}
+					}
+				})
 			}
-		}()
-	}
+
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			// Deliveries stop through their own OnStop hooks (graceful
+			// shutdown); the cancel only releases anything watching ctx.
+			// Not waiting on wg here: those hooks run after this one.
+			if cancel != nil {
+				cancel()
+			}
+
+			return nil
+		},
+	})
 }
