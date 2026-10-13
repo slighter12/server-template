@@ -1,43 +1,38 @@
-# Build Stage
-# Install tools required for project
-# Run `docker build --no-cache .` to update dependencies
-FROM golang:1.23-alpine AS builder
+# syntax=docker/dockerfile:1
 
-ARG VERSION
-ARG BUILT
-ARG GIT_COMMIT
-ARG IMAGE_NAME
+# =============================================================================
+# Builder
+# =============================================================================
+FROM golang:1.27-alpine AS builder
 
-RUN apk update && \
-    apk add --no-cache git curl
+ARG VERSION=dev
 
-WORKDIR /app
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /src
+
+# Download modules first so source changes do not invalidate the dependency layer
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
 
-RUN go mod download
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -trimpath \
+    -ldflags="-s -w -X main.Version=${VERSION}" \
+    -o /out/server ./cmd/server-template
 
-ENV FLAG="-s -w -X main.Version=${VERSION} -X main.Built=${BUILT} -X main.GitCommit=${GIT_COMMIT}"
+# =============================================================================
+# Runtime
+# =============================================================================
+FROM gcr.io/distroless/static-debian13:nonroot
 
-RUN GOOS=linux GOARCH=amd64 go build \
-    -ldflags "$FLAG" \
-    -o /app/${IMAGE_NAME} ./cmd/${IMAGE_NAME}
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /out/server /app/server
+COPY config/config_demo.yaml /app/config/config.yaml
 
-# Final Stage
-# This results in a single layer image
-FROM alpine:latest AS final
+WORKDIR /app
+EXPOSE 8080 9090
 
-ARG IMAGE_NAME
-
-WORKDIR /usr/local/bin
-
-RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache ca-certificates
-
-ADD https://github.com/golang/go/raw/master/lib/time/zoneinfo.zip /usr/local/go/lib/time/zoneinfo.zip
-
-COPY --from=builder /app/${IMAGE_NAME} ./${IMAGE_NAME}
-COPY --from=builder /app/config/config.yaml ./config.yaml
-
-ENTRYPOINT ["/usr/local/bin/${IMAGE_NAME}"]
+ENTRYPOINT ["/app/server"]

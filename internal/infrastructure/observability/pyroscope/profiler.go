@@ -8,7 +8,6 @@ import (
 	"server-template/config"
 
 	"github.com/grafana/pyroscope-go"
-	"github.com/pkg/errors"
 	"go.uber.org/fx"
 )
 
@@ -32,22 +31,22 @@ func newLogger(l *slog.Logger) logger {
 }
 
 // Debugf 實現 pyroscope.Logger 的 Debugf 方法
-func (l logger) Debugf(format string, args ...interface{}) {
+func (l logger) Debugf(format string, args ...any) {
 	l.logger.Debug(fmt.Sprintf(format, args...))
 }
 
 // Infof 實現 pyroscope.Logger 的 Infof 方法
-func (l logger) Infof(format string, args ...interface{}) {
+func (l logger) Infof(format string, args ...any) {
 	l.logger.Info(fmt.Sprintf(format, args...))
 }
 
 // Warnf 實現 pyroscope.Logger 的 Warnf 方法
-func (l logger) Warnf(format string, args ...interface{}) {
+func (l logger) Warnf(format string, args ...any) {
 	l.logger.Warn(fmt.Sprintf(format, args...))
 }
 
 // Errorf 實現 pyroscope.Logger 的 Errorf 方法
-func (l logger) Errorf(format string, args ...interface{}) {
+func (l logger) Errorf(format string, args ...any) {
 	l.logger.Error(fmt.Sprintf(format, args...))
 }
 
@@ -75,7 +74,7 @@ func New(params Params) error {
 		},
 	})
 	if err != nil {
-		return errors.WithStack(err)
+		return fmt.Errorf("start pyroscope profiler: %w", err)
 	}
 
 	params.Lifecycle.Append(fx.Hook{

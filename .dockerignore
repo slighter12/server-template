@@ -1,4 +1,74 @@
-node_modules
-*.git
-tmp
-database/migrations
+# VCS
+.git
+.gitignore
+
+# Docker metadata
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Documentation
+*.md
+LICENSE
+
+# CI, deployment, and local verification
+.github/
+deploy/
+database/
+scripts/
+.coderabbit.yaml
+.golangci.yaml
+.generator.yaml
+
+# Local config and data (config/config_demo.yaml is kept for the image)
+config.yaml
+.env
+.env.*
+
+# Go tests, tools, and generator
+go.work
+go.work.sum
+*_test.go
+internal/mocks/
+cmd/gen/
+cmd/generator/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Build and coverage output
+bin/
+dist/
+build/
+coverage/
+*.cover
+
+# IDE
+.vscode/
+.idea/
+.zed/
+.cursor/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Dependencies
+vendor/
+node_modules/

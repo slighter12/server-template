@@ -2,11 +2,13 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
+	"slices"
 
 	"server-template/config"
 
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -40,31 +42,31 @@ func New(params Params) (*Clients, error) {
 
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithChainUnaryInterceptor(ErrorClientInterceptor()),
 	}
 	if params.Config.Observability.Otel.Enable {
 		opts = append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	}
 
-	// 遍歷配置創建客戶端
-	for clientName, clientConfig := range params.Config.RPC.Clients {
-		clientConn, err := grpc.NewClient(clientConfig.Target, opts...)
+	if len(params.Config.RPC.Clients) == 0 {
+		return nil, errors.New("rpc: config section has no clients")
+	}
+
+	// Sorted iteration keeps startup and error behavior deterministic.
+	for _, clientName := range slices.Sorted(maps.Keys(params.Config.RPC.Clients)) {
+		clientConn, err := grpc.NewClient(params.Config.RPC.Clients[clientName].Target, opts...)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			_ = rpcClients.close()
+
+			return nil, fmt.Errorf("create RPC client %q: %w", clientName, err)
 		}
 
 		rpcClients.clients[ClientKey(clientName)] = clientConn
 	}
 
-	// 註冊生命週期鉤子
 	params.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			for name, client := range rpcClients.clients {
-				if err := client.Close(); err != nil {
-					return errors.Wrapf(err, "failed to close RPC client: %s", name)
-				}
-			}
-
-			return nil
+		OnStop: func(context.Context) error {
+			return rpcClients.close()
 		},
 	})
 
@@ -79,4 +81,15 @@ func (r *Clients) GetClient(key ClientKey) (*grpc.ClientConn, error) {
 	}
 
 	return client, nil
+}
+
+func (r *Clients) close() error {
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(r.clients)) {
+		if err := r.clients[name].Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close RPC client %q: %w", name, err))
+		}
+	}
+
+	return errors.Join(errs...)
 }

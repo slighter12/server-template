@@ -1,19 +1,30 @@
+// Command generator produces OpenTelemetry tracing proxies for Go interfaces.
+//
+// Usage from the repository root:
+//
+//	go run ./cmd/generator --config=.generator.yaml
 package main
 
 import (
+	"bytes"
+	"cmp"
 	_ "embed"
+	"errors"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
-	"log"
+	"go/types"
+	"maps"
 	"os"
+	"path"
 	"path/filepath"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
 	"text/template"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 )
@@ -21,308 +32,404 @@ import (
 //go:embed templates/otel_proxy.tmpl
 var otelProxyTmpl string
 
-// 定義模板類型和對應的模板內容
 var templateMap = map[string]string{
 	"otel": otelProxyTmpl,
 }
 
+// Method describes one interface method.
 type Method struct {
 	Name       string
 	Params     string
-	Results    []string // 改為 slice 存儲所有返回值
 	CallParams string
+	Results    []string
+	ResultSig  string // " T", " (A, B)" or ""
+	Assign     string // "ret0, err := "
+	ReturnVars string // "ret0, err"
+	CtxName    string
 	HasError   bool
+	// Traced is false when the first parameter is not a context.Context;
+	// such methods are passed through without a span.
+	Traced bool
 }
 
+// TemplateData is the input of the proxy templates.
 type TemplateData struct {
 	PackageName   string
+	SourcePackage string
 	ProxyName     string
 	InterfaceName string
 	TracerName    string
 	Methods       []Method
-	Imports       []string
-	ModuleName    string
+	ImportGroups  [][]string
 }
 
-type GeneratorConfig struct {
-	Generators []struct {
-		Source     string `yaml:"source"`
-		Output     string `yaml:"output"`
-		Interface  string `yaml:"interface"`
-		Package    string `yaml:"package"`
-		Tracer     string `yaml:"tracer"`
-		Template   string `yaml:"template"`
-		ModuleName string `yaml:"moduleName"`
-	} `yaml:"generators"`
+// Config describes one proxy to generate.
+type Config struct {
+	Source     string `yaml:"source"`
+	Output     string `yaml:"output"`
+	Interface  string `yaml:"interface"`
+	Package    string `yaml:"package"`
+	Tracer     string `yaml:"tracer"`
+	Template   string `yaml:"template"`
+	ModuleName string `yaml:"moduleName"`
+}
+
+// FileConfig is the .generator.yaml layout.
+type FileConfig struct {
+	Generators []Config `yaml:"generators"`
 }
 
 func main() {
-	configPath := pflag.String("config", "", "Path to config file")
-
-	// 保留原有的 flags 以維持向下相容
-	sourceFile := pflag.String("source", "", "Source file containing the interface")
-	outputFile := pflag.String("output", "proxy.gen.go", "Output file for the generated proxy")
-	interfaceName := pflag.String("interface", "", "Interface to generate proxy for")
-	packageName := pflag.String("package", "", "Package name for the generated proxy")
-	tracerName := pflag.String("tracer", "", "Tracer name for the generated proxy")
-	templateType := pflag.String("template", "", "Template type (e.g., otel ...)")
-	moduleName := pflag.String("module-name", "", "Module name for import paths")
-
-	pflag.Parse()
-
-	if *configPath != "" {
-		// 讀取設定檔
-		configData, err := os.ReadFile(*configPath)
-		if err != nil {
-			log.Fatalf("Error reading config file: %v", err)
-		}
-
-		var config GeneratorConfig
-		if err := yaml.Unmarshal(configData, &config); err != nil {
-			log.Fatalf("Error parsing config file: %v", err)
-		}
-
-		// 處理每個生成任務
-		for _, gen := range config.Generators {
-			if err := generate(gen.Source, gen.Output, gen.Interface, gen.Package, gen.Tracer, gen.Template, gen.ModuleName); err != nil {
-				log.Fatalf("Error generating proxy: %v", err)
-			}
-		}
-
-		return
-	}
-
-	// 使用命令列參數的情況
-	if err := generate(*sourceFile, *outputFile, *interfaceName, *packageName, *tracerName, *templateType, *moduleName); err != nil {
-		log.Fatalf("Error generating proxy: %v", err)
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "generator:", err)
+		os.Exit(1)
 	}
 }
 
-func generate(source, output, interfaceName, packageName, tracerName, templateType, moduleName string) error {
-	// 校驗參數
-	if source == "" || interfaceName == "" || templateType == "" || moduleName == "" {
-		return fmt.Errorf("source, interface, template and module-name must be specified")
+func run() error {
+	configPath := pflag.String("config", "", "Path to config file")
+	var c Config
+	pflag.StringVar(&c.Source, "source", "", "Source file containing the interface")
+	pflag.StringVar(&c.Output, "output", "proxy.gen.go", "Output file for the generated proxy")
+	pflag.StringVar(&c.Interface, "interface", "", "Interface to generate proxy for")
+	pflag.StringVar(&c.Package, "package", "", "Package name for the generated proxy")
+	pflag.StringVar(&c.Tracer, "tracer", "", "Tracer name for the generated proxy")
+	pflag.StringVar(&c.Template, "template", "", "Template type (e.g. otel)")
+	pflag.StringVar(&c.ModuleName, "module-name", "", "Module name for import paths")
+	pflag.Parse()
+
+	configs := []Config{c}
+	if *configPath != "" {
+		data, err := os.ReadFile(*configPath)
+		if err != nil {
+			return fmt.Errorf("read config: %w", err)
+		}
+		var fc FileConfig
+		if err := yaml.Unmarshal(data, &fc); err != nil {
+			return fmt.Errorf("parse config: %w", err)
+		}
+		configs = fc.Generators
 	}
 
-	// 從模板映射中獲取模板文件路徑
-	templateFile, ok := templateMap[templateType]
-	if !ok {
-		return fmt.Errorf("unsupported template type: %s. Supported types: %v", templateType, getSupportedTemplates())
+	for _, cfg := range configs {
+		src, err := generate(cfg)
+		if err != nil {
+			return fmt.Errorf("generate %s: %w", cfg.Interface, err)
+		}
+		if err := os.WriteFile(cfg.Output, src, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", cfg.Output, err)
+		}
+		fmt.Printf("Proxy for interface '%s' generated at '%s' using template '%s'\n", cfg.Interface, cfg.Output, cfg.Template)
 	}
-
-	// 解析接口文件
-	methods, imports, err := parseInterfaceMethods(source, interfaceName, moduleName)
-	if err != nil {
-		return errors.Wrap(err, "failed to parse interface")
-	}
-
-	// 構造模板數據
-	data := &TemplateData{
-		PackageName:   packageName,
-		ProxyName:     interfaceName + "Proxy",
-		InterfaceName: interfaceName,
-		TracerName:    tracerName,
-		Methods:       methods,
-		Imports:       imports,
-		ModuleName:    moduleName,
-	}
-
-	// 生成代碼
-	err = generateCode(templateFile, output, data)
-	if err != nil {
-		return errors.Wrap(err, "failed to generate code")
-	}
-
-	fmt.Printf("Proxy for interface '%s' generated at '%s' using template '%s'\n", interfaceName, output, templateType)
 
 	return nil
 }
 
-func parseInterfaceMethods(sourceFile, interfaceName, moduleName string) ([]Method, []string, error) {
+// generate returns the gofmt-formatted proxy source for cfg.
+func generate(cfg Config) ([]byte, error) {
+	if cfg.Source == "" || cfg.Interface == "" || cfg.Template == "" || cfg.ModuleName == "" {
+		return nil, errors.New("source, interface, template and module-name must be specified")
+	}
+
+	tmplText, ok := templateMap[cfg.Template]
+	if !ok {
+		return nil, fmt.Errorf("unsupported template type: %s. Supported types: %v", cfg.Template, getSupportedTemplates())
+	}
+
 	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, sourceFile, nil, parser.AllErrors)
+	node, err := parser.ParseFile(fset, cfg.Source, nil, parser.SkipObjectResolution)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to parse interface")
+		return nil, fmt.Errorf("parse source: %w", err)
 	}
 
-	imports, err := collectImports(node, sourceFile, moduleName)
+	methods, used, err := extractMethods(node, cfg.Interface)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	methods := extractMethods(node, interfaceName)
+	srcImport, err := sourceImportPath(cfg.Source, cfg.ModuleName)
+	if err != nil {
+		return nil, err
+	}
 
-	return methods, imports, nil
+	pkg := cfg.Package
+	if pkg == "" {
+		pkg = node.Name.Name
+	}
+
+	data := &TemplateData{
+		PackageName:   pkg,
+		SourcePackage: node.Name.Name,
+		ProxyName:     cfg.Interface + "Proxy",
+		InterfaceName: cfg.Interface,
+		TracerName:    cfg.Tracer,
+		Methods:       methods,
+		ImportGroups:  groupImports(buildImports(node, used, srcImport, cfg.ModuleName), cfg.ModuleName),
+	}
+
+	tmpl, err := template.New("proxy").Parse(tmplText)
+	if err != nil {
+		return nil, fmt.Errorf("parse template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("execute template: %w", err)
+	}
+
+	out, err := format.Source(buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("format generated code: %w\n%s", err, buf.String())
+	}
+
+	return out, nil
 }
 
-func collectImports(node *ast.File, sourceFile string, moduleName string) ([]string, error) {
-	imports := []string{}
-
-	workDir, err := os.Getwd()
+// sourceImportPath derives the import path of the package holding source from the nearest go.mod.
+func sourceImportPath(source, moduleName string) (string, error) {
+	abs, err := filepath.Abs(filepath.Dir(source))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get working directory")
+		return "", err
+	}
+	for dir := abs; ; dir = filepath.Dir(dir) {
+		if data, err := os.ReadFile(filepath.Join(dir, "go.mod")); err == nil {
+			mod := moduleName
+			for line := range strings.SplitSeq(string(data), "\n") {
+				if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module "); ok {
+					mod = strings.Trim(strings.TrimSpace(rest), `"`)
+					break
+				}
+			}
+			rel, err := filepath.Rel(dir, abs)
+			if err != nil {
+				return "", err
+			}
+
+			return path.Join(mod, filepath.ToSlash(rel)), nil
+		}
+		if dir == filepath.Dir(dir) {
+			return "", fmt.Errorf("go.mod not found above %s", source)
+		}
+	}
+}
+
+// buildImports returns import specs (`alias "path"` or `"path"`) for everything the proxy needs.
+func buildImports(node *ast.File, used map[string]bool, srcImport, moduleName string) []string {
+	byPath := map[string]string{} // path -> spec
+
+	add := func(p, alias string) {
+		if alias != "" {
+			byPath[p] = alias + " " + strconv.Quote(p)
+		} else {
+			byPath[p] = strconv.Quote(p)
+		}
 	}
 
-	absSourcePath, err := filepath.Abs(filepath.Join(workDir, sourceFile))
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get absolute source path")
+	for _, p := range []string{
+		"fmt",
+		"go.opentelemetry.io/otel",
+		"go.opentelemetry.io/otel/attribute",
+		"go.opentelemetry.io/otel/codes",
+		"go.opentelemetry.io/otel/trace",
+		moduleName + "/internal/pkg/apperr",
+	} {
+		add(p, "")
 	}
-
-	sourcePath := filepath.Dir(absSourcePath)
-
-	moduleIdx := strings.Index(sourcePath, moduleName)
-	if moduleIdx != -1 {
-		packagePath := sourcePath[moduleIdx:]
-		importPath := `"` + packagePath + `"`
-		imports = append(imports, importPath)
-	}
+	add(srcImport, "")
 
 	for _, imp := range node.Imports {
-		imports = append(imports, imp.Path.Value)
+		p, _ := strconv.Unquote(imp.Path.Value)
+		name, alias := path.Base(p), ""
+		if imp.Name != nil {
+			name, alias = imp.Name.Name, imp.Name.Name
+		}
+		if used[name] {
+			add(p, alias)
+		}
 	}
 
-	sort.Slice(imports, func(i, j int) bool {
-		iStr := strings.Trim(imports[i], `"`)
-		jStr := strings.Trim(imports[j], `"`)
-
-		iHasUpper := strings.ToLower(iStr) != iStr
-		jHasUpper := strings.ToLower(jStr) != jStr
-		if iHasUpper != jHasUpper {
-			return iHasUpper
-		}
-
-		return iStr < jStr
-	})
-
-	return imports, nil
+	return slices.Sorted(maps.Values(byPath))
 }
 
-func extractMethods(node *ast.File, interfaceName string) []Method {
-	var methods []Method
-	ast.Inspect(node, func(n ast.Node) bool {
-		ts, ok := n.(*ast.TypeSpec)
-		if !ok || ts.Name.Name != interfaceName {
-			return true
-		}
+func importPathOf(spec string) string {
+	i := strings.IndexByte(spec, '"')
+	p, _ := strconv.Unquote(spec[i:])
 
-		it, ok := ts.Type.(*ast.InterfaceType)
+	return p
+}
+
+// groupImports splits imports into std / third-party / module-local groups.
+func groupImports(specs []string, moduleName string) [][]string {
+	var std, third, local []string
+	for _, s := range specs {
+		p := importPathOf(s)
+		switch {
+		case p == moduleName || strings.HasPrefix(p, moduleName+"/"):
+			local = append(local, s)
+		case !strings.Contains(strings.SplitN(p, "/", 2)[0], "."):
+			std = append(std, s)
+		default:
+			third = append(third, s)
+		}
+	}
+	sortSpecs := func(l []string) {
+		slices.SortFunc(l, func(a, b string) int { return cmp.Compare(importPathOf(a), importPathOf(b)) })
+	}
+	var groups [][]string
+	for _, g := range [][]string{std, third, local} {
+		if len(g) > 0 {
+			sortSpecs(g)
+			groups = append(groups, g)
+		}
+	}
+
+	return groups
+}
+
+func extractMethods(node *ast.File, interfaceName string) ([]Method, map[string]bool, error) {
+	var iface *ast.InterfaceType
+	for _, decl := range node.Decls {
+		gd, ok := decl.(*ast.GenDecl)
 		if !ok {
-			return true
+			continue
 		}
-
-		for _, m := range it.Methods.List {
-			if len(m.Names) == 0 {
-				continue
+		for _, spec := range gd.Specs {
+			if ts, ok := spec.(*ast.TypeSpec); ok && ts.Name.Name == interfaceName {
+				if iface, ok = ts.Type.(*ast.InterfaceType); !ok {
+					return nil, nil, fmt.Errorf("%s is not an interface", interfaceName)
+				}
 			}
-
-			ft, ok := m.Type.(*ast.FuncType)
-			if !ok {
-				continue
-			}
-
-			params, callParams := formatParams(ft.Params)
-			results, hasError := formatResults(ft.Results)
-
-			methods = append(methods, Method{
-				Name:       m.Names[0].Name,
-				Params:     params,
-				Results:    results,
-				CallParams: callParams,
-				HasError:   hasError,
-			})
 		}
+	}
+	if iface == nil {
+		return nil, nil, fmt.Errorf("interface %s not found", interfaceName)
+	}
 
-		return false
-	})
+	used := map[string]bool{}
+	var methods []Method
+	for _, m := range iface.Methods.List {
+		ft, ok := m.Type.(*ast.FuncType)
+		if !ok || len(m.Names) == 0 {
+			return nil, nil, fmt.Errorf("embedded interfaces are not supported (in %s)", interfaceName)
+		}
+		methods = append(methods, buildMethod(m.Names[0].Name, ft, used))
+	}
 
-	return methods
+	return methods, used, nil
 }
 
-func formatParams(fields *ast.FieldList) (string, string) {
-	if fields == nil {
-		return "", ""
-	}
+func buildMethod(name string, ft *ast.FuncType, used map[string]bool) Method {
+	m := Method{Name: name, CtxName: "ctx"}
 
-	var paramParts []string
-	var callParts []string
-
-	for _, f := range fields.List {
-		t := formatType(f.Type)
-		if len(f.Names) > 0 {
-			for _, name := range f.Names {
-				paramParts = append(paramParts, name.Name+" "+t)
-				callParts = append(callParts, name.Name)
+	var params, calls []string
+	if ft.Params != nil {
+		idx := 0
+		for _, f := range ft.Params.List {
+			t := formatType(f.Type, used)
+			_, variadic := f.Type.(*ast.Ellipsis)
+			names := f.Names
+			if len(names) == 0 {
+				names = []*ast.Ident{nil}
 			}
-		} else {
-			paramParts = append(paramParts, t)
+			for _, n := range names {
+				pn := fmt.Sprintf("arg%d", idx)
+				if n != nil && n.Name != "_" {
+					pn = n.Name
+				}
+				if idx == 0 && t == "context.Context" {
+					m.Traced = true
+					if n == nil || n.Name == "_" {
+						pn = "ctx"
+					}
+					m.CtxName = pn
+				}
+				params = append(params, pn+" "+t)
+				if variadic {
+					calls = append(calls, pn+"...")
+				} else {
+					calls = append(calls, pn)
+				}
+				idx++
+			}
 		}
 	}
+	m.Params = strings.Join(params, ", ")
+	m.CallParams = strings.Join(calls, ", ")
 
-	return strings.Join(paramParts, ", "), strings.Join(callParts, ", ")
-}
-
-func formatResults(fields *ast.FieldList) ([]string, bool) {
-	if fields == nil {
-		return nil, false
-	}
-
-	results := make([]string, 0, len(fields.List))
-	hasError := false
-
-	for _, f := range fields.List {
-		t := formatType(f.Type)
-		if t == "error" {
-			hasError = true
+	if ft.Results != nil {
+		for _, f := range ft.Results.List {
+			t := formatType(f.Type, used)
+			for range max(len(f.Names), 1) {
+				m.Results = append(m.Results, t)
+			}
 		}
-		results = append(results, t)
+	}
+	m.HasError = len(m.Results) > 0 && m.Results[len(m.Results)-1] == "error"
+
+	switch len(m.Results) {
+	case 0:
+	case 1:
+		m.ResultSig = " " + m.Results[0]
+	default:
+		m.ResultSig = " (" + strings.Join(m.Results, ", ") + ")"
 	}
 
-	return results, hasError
+	if m.HasError {
+		vars := make([]string, len(m.Results))
+		for i := range vars {
+			vars[i] = fmt.Sprintf("ret%d", i)
+		}
+		vars[len(vars)-1] = "err"
+		m.ReturnVars = strings.Join(vars, ", ")
+		m.Assign = m.ReturnVars + " := "
+	}
+
+	return m
 }
 
-func formatType(expr ast.Expr) string {
+// formatType renders a type expression and records the package qualifiers it uses.
+func formatType(expr ast.Expr, used map[string]bool) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return t.Name
 	case *ast.StarExpr:
-		return "*" + formatType(t.X)
+		return "*" + formatType(t.X, used)
 	case *ast.SelectorExpr:
-		return fmt.Sprintf("%s.%s", formatType(t.X), t.Sel.Name)
+		x := formatType(t.X, used)
+		used[x] = true
+
+		return x + "." + t.Sel.Name
 	case *ast.ArrayType:
-		return "[]" + formatType(t.Elt)
+		l := ""
+		if t.Len != nil {
+			l = types.ExprString(t.Len)
+		}
+
+		return "[" + l + "]" + formatType(t.Elt, used)
 	case *ast.MapType:
-		return fmt.Sprintf("map[%s]%s", formatType(t.Key), formatType(t.Value))
+		return "map[" + formatType(t.Key, used) + "]" + formatType(t.Value, used)
+	case *ast.Ellipsis:
+		return "..." + formatType(t.Elt, used)
 	case *ast.InterfaceType:
-		return "interface{}"
-	default:
-		return fmt.Sprintf("/* unsupported type %T */", expr)
-	}
-}
-
-func generateCode(templatePath, outputFile string, data *TemplateData) error {
-	funcMap := template.FuncMap{
-		"sub": func(a, b int) int { return a - b },
+		if t.Methods == nil || len(t.Methods.List) == 0 {
+			return "any"
+		}
 	}
 
-	tmpl, err := template.New("proxy").Funcs(funcMap).Parse(templatePath)
-	if err != nil {
-		return errors.Wrap(err, "failed to parse template")
-	}
+	// Fallback for func, chan, struct, non-empty interface literals: collect qualifiers conservatively.
+	ast.Inspect(expr, func(n ast.Node) bool {
+		if se, ok := n.(*ast.SelectorExpr); ok {
+			if id, ok := se.X.(*ast.Ident); ok {
+				used[id.Name] = true
+			}
+		}
 
-	file, err := os.Create(outputFile)
-	if err != nil {
-		return errors.Wrap(err, "failed to create output file")
-	}
-	defer file.Close()
+		return true
+	})
 
-	return errors.Wrap(tmpl.Execute(file, data), "failed to execute template")
+	return strings.ReplaceAll(types.ExprString(expr), "interface{}", "any")
 }
 
 func getSupportedTemplates() []string {
-	keys := make([]string, 0, len(templateMap))
-	for key := range templateMap {
-		keys = append(keys, key)
-	}
-
-	return keys
+	return slices.Sorted(maps.Keys(templateMap))
 }

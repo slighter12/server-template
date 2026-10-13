@@ -1,43 +1,45 @@
 package handler
 
 import (
-	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
+	"server-template/internal/delivery/http/middleware"
+	"server-template/internal/delivery/http/request"
+	"server-template/internal/delivery/http/response"
+	"server-template/internal/domain/entity"
 	"server-template/internal/domain/usecase"
+	"server-template/internal/pkg/apperr"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
+// AuthHandler serves the auth endpoints. Handlers only return errors; the
+// error middleware renders them.
 type AuthHandler struct {
 	authUseCase usecase.AuthHTTPUseCase
-	logger      *slog.Logger
 }
 
-func NewAuthHandler(authUseCase usecase.AuthHTTPUseCase, logger *slog.Logger) *AuthHandler {
-	return &AuthHandler{
-		authUseCase: authUseCase,
-		logger:      logger,
-	}
+func NewAuthHandler(authUseCase usecase.AuthHTTPUseCase) *AuthHandler {
+	return &AuthHandler{authUseCase: authUseCase}
 }
 
-// Request and response structs
+// RegisterRequest password bounds mirror entity.MinPasswordLength/MaxPasswordLength;
+// strength (upper, lower, digit) is enforced by the usecase.
 type RegisterRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=6"`
+	Email    string `json:"email" validate:"required,email,max=254"`
+	Password string `json:"password" validate:"required,min=8,max=72"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email    string `json:"email" validate:"required,email,max=254"`
+	Password string `json:"password" validate:"required,max=72"`
 }
 
 type UserResponse struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt time.Time `json:"created_at,omitzero"`
 }
 
 type AuthResponse struct {
@@ -45,109 +47,72 @@ type AuthResponse struct {
 	User  UserResponse `json:"user"`
 }
 
-// Register 處理用戶註冊請求
-func (h *AuthHandler) Register(c echo.Context) error {
-	var req RegisterRequest
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request format",
-		})
-	}
-
-	if err := c.Validate(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
-		})
-	}
-
-	// 調用 UseCase 層
-	token, user, err := h.authUseCase.Register(c.Request().Context(), req.Email, req.Password)
-	if err != nil {
-		h.logger.Error("Failed to register user", slog.Any("error", err))
-
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
-		})
-	}
-
-	// 返回用戶信息和 token
-	return c.JSON(http.StatusCreated, AuthResponse{
-		Token: token,
-		User: UserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt,
-		},
-	})
+type ProfileResponse struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
 }
 
-// Login 處理用戶登入請求
-func (h *AuthHandler) Login(c echo.Context) error {
-	var req LoginRequest
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request format",
-		})
-	}
-
-	if err := c.Validate(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
-		})
-	}
-
-	// 調用 UseCase 層
-	token, user, err := h.authUseCase.Login(c.Request().Context(), req.Email, req.Password)
-	if err != nil {
-		h.logger.Error("Failed to login user", slog.Any("error", err))
-
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": err.Error(),
-		})
-	}
-
-	// 返回用戶信息和 token
-	return c.JSON(http.StatusOK, AuthResponse{
-		Token: token,
-		User: UserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt,
-		},
-	})
+type LogoutResponse struct {
+	Message string `json:"message"`
 }
 
-// Logout 處理用戶登出請求
-func (h *AuthHandler) Logout(c echo.Context) error {
-	// 從 Authorization 頭部獲取 token
-	authHeader := c.Request().Header.Get("Authorization")
-	if authHeader == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Authorization header is required",
-		})
+func newAuthResponse(token string, u *entity.User) AuthResponse {
+	return AuthResponse{
+		Token: token,
+		User:  UserResponse{ID: u.ID, Email: u.Email, CreatedAt: u.CreatedAt},
 	}
+}
 
-	// 檢查 Bearer 前綴
-	parts := strings.Split(authHeader, " ")
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Authorization header format must be Bearer {token}",
-		})
-	}
-
-	tokenString := parts[1]
-
-	// 調用 UseCase 層
-	err := h.authUseCase.Logout(c.Request().Context(), tokenString)
+// Register handles POST /auth/register.
+func (h *AuthHandler) Register(c *echo.Context) error {
+	req, err := request.BindRequired[RegisterRequest](c)
 	if err != nil {
-		h.logger.Error("Failed to logout user", slog.Any("error", err))
-
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
-		})
+		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "Logged out successfully",
-	})
+	token, u, err := h.authUseCase.Register(c.Request().Context(), req.Email, req.Password)
+	if err != nil {
+		return err
+	}
+
+	return response.Success(c, http.StatusCreated, newAuthResponse(token, u))
+}
+
+// Login handles POST /auth/login.
+func (h *AuthHandler) Login(c *echo.Context) error {
+	req, err := request.BindRequired[LoginRequest](c)
+	if err != nil {
+		return err
+	}
+
+	token, u, err := h.authUseCase.Login(c.Request().Context(), req.Email, req.Password)
+	if err != nil {
+		return err
+	}
+
+	return response.Success(c, http.StatusOK, newAuthResponse(token, u))
+}
+
+// Logout handles POST /auth/logout.
+func (h *AuthHandler) Logout(c *echo.Context) error {
+	token, err := middleware.BearerToken(c.Request())
+	if err != nil {
+		return err
+	}
+
+	if err := h.authUseCase.Logout(c.Request().Context(), token); err != nil {
+		return err
+	}
+
+	return response.Success(c, http.StatusOK, LogoutResponse{Message: "logged out"})
+}
+
+// Profile handles GET /api/profile; it requires the JWT middleware.
+func (h *AuthHandler) Profile(c *echo.Context) error {
+	id, ok := middleware.IdentityFromContext(c.Request().Context())
+	if !ok {
+		return apperr.ErrUnauthenticated
+	}
+
+	return response.Success(c, http.StatusOK, ProfileResponse{UserID: id.UserID, Email: id.Email})
 }

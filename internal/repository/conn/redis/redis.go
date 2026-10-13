@@ -2,17 +2,18 @@ package redis
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"server-template/config"
 	"server-template/internal/domain/lifecycle"
 
-	"github.com/pkg/errors"
 	"github.com/redis/go-redis/v9"
 	redisLib "github.com/slighter12/go-lib/database/redis/cluster"
 	"go.uber.org/fx"
 )
 
-// Params 定義所需的參數
+// Params defines the required parameters.
 type Params struct {
 	fx.In
 	fx.Lifecycle
@@ -20,23 +21,31 @@ type Params struct {
 	Config *config.Config
 }
 
-// New 創建一個新的 Redis 集群客戶端
+// New creates a Redis cluster client. Redis is mandatory: a missing config
+// section, a creation failure or a failed OnStart ping is an error.
 func New(params Params) (*redis.ClusterClient, error) {
-	if params.Config == nil {
-		return nil, errors.New("redis configuration is required")
+	cfg := params.Config.Redis
+	if cfg == nil || len(cfg.Address) == 0 {
+		return nil, errors.New("redis: config section is missing or has no address")
 	}
 
-	client := redisLib.New(params.Config.Redis)
+	client, err := redisLib.New(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Redis client: %w", err)
+	}
 
-	// 添加生命週期管理
 	params.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
 			ctx, cancel := context.WithTimeout(startCtx, lifecycle.DefaultTimeout)
 			defer cancel()
 
-			return client.Ping(ctx).Err()
+			if err := client.Ping(ctx).Err(); err != nil {
+				return fmt.Errorf("failed to ping Redis: %w", err)
+			}
+
+			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(context.Context) error {
 			return client.Close()
 		},
 	})
