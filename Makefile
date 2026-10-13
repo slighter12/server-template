@@ -21,9 +21,9 @@ GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v
 test-race: ## launch all tests with race detection
 	go test -p 4 ./... -cover -race
 
-test-integration: ## start postgres/mysql/mongo/redis (docker compose) and run the integration tests
+test-integration: ## start postgres/mysql/mongo/redis (docker compose) and run the integration tests (they apply the goose migrations themselves)
 	docker compose up -d --wait postgres mysql mongo redis
-	go test -tags=integration ./internal/test/...
+	go test -tags=integration -race -count=1 ./internal/test/conn/... ./internal/delivery/grpc/...
 
 ########
 # lint #

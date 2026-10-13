@@ -40,7 +40,7 @@ Dependency direction: delivery -> usecase -> domain <- repository / infrastructu
 
 - Postgres, MySQL, MongoDB and Redis are all mandatory. Each provider (`internal/repository/conn/*`) returns an error for a missing config section, a creation failure or a failed OnStart ping; there are no `enable` flags and no nil/empty results. `config.Validate` requires all four sections. The `redis` section configures a Redis Cluster client; docker-compose runs a single-node cluster.
 - To drop a connection, delete its provider in `injectConn` (`main.go`), its config section and `config.Validate` check, its docker-compose service, and every repository that depends on it.
-- `make test-integration` (`-tags=integration`, `internal/test/conn`) starts the compose services and checks all four against real servers; CI runs it in the `integration` job.
+- `make test-integration` (`-tags=integration`, `internal/test/conn`) starts the compose services, applies the Postgres goose migrations from the test itself (idempotent) and exercises ORM / query syntax on all four against real servers (also `internal/delivery/grpc` token store on Redis); CI runs it in the `integration` job. Mongo transactions are skipped on the standalone compose mongod.
 
 ## Migrations
 
