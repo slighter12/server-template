@@ -27,12 +27,12 @@ func NewAuthHandler(authUseCase usecase.AuthHTTPUseCase) *AuthHandler {
 // RegisterRequest password bounds mirror entity.MinPasswordLength/MaxPasswordLength;
 // strength (upper, lower, digit) is enforced by the usecase.
 type RegisterRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,email,max=254"`
 	Password string `json:"password" validate:"required,min=8,max=72"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,email,max=254"`
 	Password string `json:"password" validate:"required,max=72"`
 }
 

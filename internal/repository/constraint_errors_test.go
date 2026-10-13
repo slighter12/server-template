@@ -27,6 +27,7 @@ func TestConstraintHelpers(t *testing.T) {
 	assert.Empty(t, violatedConstraintName(errors.New("x")))
 
 	assert.True(t, violatesEmail(uniq))
+	assert.True(t, violatesEmail(&pgconn.PgError{Code: "23505", ConstraintName: "udx_users_email_lower"}))
 	assert.False(t, violatesEmail(&pgconn.PgError{Code: "23505", ConstraintName: "users_pkey"}))
 	assert.True(t, violatesEmail(errors.New(`duplicate key value violates unique constraint "users_email_key"`)))
 

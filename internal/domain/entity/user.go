@@ -2,6 +2,7 @@ package entity
 
 import (
 	"net/mail"
+	"strings"
 	"time"
 	"unicode"
 
@@ -21,13 +22,21 @@ const (
 // The password column holds an encoded password hash (argon2id PHC string,
 // roughly 100 characters), never plaintext; hashing is done by service.PasswordHasher.
 type User struct {
-	ID        string          `json:"id" gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-	Name      string          `json:"name" gorm:"type:varchar(32);not null;default:''"`
-	Email     string          `json:"email" gorm:"type:varchar(255);uniqueIndex;not null"` // RFC 5322 標準規定 email 最大長度為 255 字元
-	Password  string          `json:"-" gorm:"type:varchar(255);not null"`                 // encoded hash, 255 leaves room for argon2id PHC strings and parameter changes
-	Status    user.UserStatus `json:"status" gorm:"type:integer;not null;default:1"`       // default must equal user.UserStatusActive
+	ID   string `json:"id" gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	Name string `json:"name" gorm:"type:text;not null;default:''"` // max 32, enforced in Validate and request validation
+	// Email is stored lower-cased (see NormalizeEmail); max 254 characters per RFC 5321.
+	// Uniqueness is the lower(email) expression index udx_users_email_lower in the
+	// migration; gorm tags cannot express it, so there is no uniqueIndex tag here.
+	Email     string          `json:"email" gorm:"type:text;not null"`
+	Password  string          `json:"-" gorm:"type:text;not null"`                   // encoded hash; TEXT leaves room for argon2id PHC strings and parameter changes
+	Status    user.UserStatus `json:"status" gorm:"type:integer;not null;default:1"` // default must equal user.UserStatusActive
 	CreatedAt time.Time       `json:"created_at" gorm:"type:timestamp with time zone;not null;default:CURRENT_TIMESTAMP"`
 	UpdatedAt time.Time       `json:"updated_at" gorm:"type:timestamp with time zone;not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
+}
+
+// NormalizeEmail returns the canonical form of an email address: trimmed and lower-cased.
+func NormalizeEmail(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 // Validate checks the profile fields (not the password).

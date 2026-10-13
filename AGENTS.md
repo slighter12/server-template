@@ -40,6 +40,7 @@ Dependency direction: delivery -> usecase -> domain <- repository / infrastructu
 
 - Files in `database/migrations/postgres/` are goose files managed by gem; add new files, never edit existing ones.
 - gem currently emits MySQL `ALTER` syntax. For Postgres, write `ALTER` migrations by hand (see `20261013000000_alter_users.sql`).
+- Postgres string columns default to `TEXT`; length limits live in request validation (or an explicit `CHECK` when the DB must enforce it).
 
 ## Verification
 

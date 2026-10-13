@@ -103,3 +103,18 @@ func TestLogin(t *testing.T) {
 		t.Fatalf("errors must be indistinguishable: %q vs %q", errWrong, errMissing)
 	}
 }
+
+func TestEmailCaseInsensitive(t *testing.T) {
+	_, register, login := newUC()
+	ctx := t.Context()
+
+	if _, err := register(ctx, "foo@example.com", "Passw0rdOK"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := register(ctx, "Foo@Example.com", "Passw0rdOK"); !errors.Is(err, entity.ErrEmailTaken) {
+		t.Fatalf("err = %v, want ErrEmailTaken", err)
+	}
+	if _, err := login(ctx, " FOO@example.COM ", "Passw0rdOK"); err != nil {
+		t.Fatalf("login with different casing: %v", err)
+	}
+}

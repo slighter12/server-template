@@ -27,6 +27,7 @@ func NewAuthUseCase(userRepo repository.UserRepository, hasher service.PasswordH
 }
 
 func (uc *authUseCase) Register(ctx context.Context, email, password string) (*entity.User, error) {
+	email = entity.NormalizeEmail(email)
 	if err := entity.ValidatePassword(password); err != nil {
 		return nil, err
 	}
@@ -64,6 +65,7 @@ func (uc *authUseCase) Register(ctx context.Context, email, password string) (*e
 }
 
 func (uc *authUseCase) Login(ctx context.Context, email, password string) (*entity.User, error) {
+	email = entity.NormalizeEmail(email)
 	u, err := uc.userRepo.FindByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, entity.ErrUserNotFound) {
