@@ -2,17 +2,18 @@ package mysql
 
 import (
 	"context"
+	"fmt"
 
 	"server-template/config"
 	"server-template/internal/domain/lifecycle"
+	"server-template/internal/repository/conn"
 
-	"github.com/pkg/errors"
 	mysqlLib "github.com/slighter12/go-lib/database/mysql"
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 )
 
-// Params 定義所需的參數
+// Params defines the required parameters.
 type Params struct {
 	fx.In
 	fx.Lifecycle
@@ -20,7 +21,7 @@ type Params struct {
 	Config *config.Config
 }
 
-// Result 定義返回的連線映射
+// Result is the connection map plus the default client.
 type Result struct {
 	fx.Out
 
@@ -28,59 +29,44 @@ type Result struct {
 	Default *gorm.DB            `name:"default_mysql"`
 }
 
-// New 創建 MySQL 客戶端映射
+// New creates MySQL clients. MySQL is optional: with an empty config section
+// it returns empty results and registers no lifecycle hooks.
 func New(params Params) (Result, error) {
-	result := Result{
-		Clients: make(map[string]*gorm.DB),
-	}
-
-	// 如果沒有配置 MySQL，返回空映射
+	result := Result{Clients: make(map[string]*gorm.DB)}
 	if len(params.Config.Mysql) == 0 {
 		return result, nil
 	}
 
-	// 遍歷所有 MySQL 配置創建客戶端
-	for name, cfg := range params.Config.Mysql {
-		db, err := mysqlLib.New(cfg)
+	for _, name := range conn.SortedNames(params.Config.Mysql) {
+		db, err := mysqlLib.New(params.Config.Mysql[name])
 		if err != nil {
-			return result, errors.Wrapf(err, "failed to create MySQL client: %s", name)
+			return Result{Clients: make(map[string]*gorm.DB)}, fmt.Errorf("failed to create MySQL client %s: %w", name, err)
 		}
 
 		sqlDB, err := db.DB()
 		if err != nil {
-			return result, errors.Wrapf(err, "failed to get MySQL sql.DB: %s", name)
+			return Result{Clients: make(map[string]*gorm.DB)}, fmt.Errorf("failed to get MySQL sql.DB %s: %w", name, err)
 		}
 
-		// 添加生命週期管理
 		params.Append(fx.Hook{
 			OnStart: func(startCtx context.Context) error {
 				ctx, cancel := context.WithTimeout(startCtx, lifecycle.DefaultTimeout)
 				defer cancel()
 
-				return sqlDB.PingContext(ctx)
+				if err := sqlDB.PingContext(ctx); err != nil {
+					return fmt.Errorf("failed to ping MySQL %s: %w", name, err)
+				}
+
+				return nil
 			},
-			OnStop: func(_ context.Context) error {
+			OnStop: func(context.Context) error {
 				return sqlDB.Close()
 			},
 		})
 
 		result.Clients[name] = db
-
-		// 設置默認客戶端
-		if name == "main" {
-			result.Default = db
-		}
 	}
-
-	// 確保有默認客戶端
-	if result.Default == nil && len(result.Clients) > 0 {
-		// 如果沒有 "main" 客戶端，使用第一個作為默認
-		for _, client := range result.Clients {
-			result.Default = client
-
-			break
-		}
-	}
+	result.Default = conn.Default(result.Clients)
 
 	return result, nil
 }

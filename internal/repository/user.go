@@ -2,36 +2,63 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"server-template/internal/domain/entity"
 	"server-template/internal/domain/repository"
+	"server-template/internal/pkg/apperr"
 	"server-template/internal/repository/gen/query"
 
-	"go.uber.org/fx"
 	"gorm.io/gorm"
 )
 
 type userRepository struct {
-	fx.In
-	q *query.Query
+	db *gorm.DB
 }
 
+// NewUserRepository builds the GORM user repository. Methods use the
+// transaction carried by ctx (see TransactionManager) when there is one,
+// otherwise db.
 func NewUserRepository(db *gorm.DB) repository.UserRepository {
-	return &userRepository{q: query.Use(db)}
+	return &userRepository{db: db}
 }
 
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
-	return WrapNoValue(r.q.WithContext(ctx).User.Create(user), "Create")
+	q := query.Use(DBFromContext(ctx, r.db))
+	err := q.WithContext(ctx).User.Create(user)
+	switch {
+	case err == nil:
+		return nil
+	case violatesColumn(err, "email"):
+		return apperr.Wrap(err, entity.ErrEmailTaken)
+	case isUniqueConstraintViolation(err):
+		return apperr.Wrap(err, apperr.ErrConflict)
+	default:
+		return apperr.Wrap(err, apperr.ErrInternal)
+	}
 }
 
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*entity.User, error) {
-	user, err := r.q.WithContext(ctx).User.Where(r.q.User.Email.Eq(email)).First()
+	q := query.Use(DBFromContext(ctx, r.db))
+	user, err := q.WithContext(ctx).User.Where(q.User.Email.Eq(email)).First()
 
-	return WrapResult(user, err, "FindByEmail")
+	return user, mapFindError(err)
 }
 
 func (r *userRepository) FindByID(ctx context.Context, id string) (*entity.User, error) {
-	user, err := r.q.WithContext(ctx).User.Where(r.q.User.ID.Eq(id)).First()
+	q := query.Use(DBFromContext(ctx, r.db))
+	user, err := q.WithContext(ctx).User.Where(q.User.ID.Eq(id)).First()
 
-	return WrapResult(user, err, "FindByID")
+	return user, mapFindError(err)
+}
+
+func mapFindError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return apperr.Wrap(err, entity.ErrUserNotFound)
+	default:
+		return apperr.Wrap(err, apperr.ErrInternal)
+	}
 }
