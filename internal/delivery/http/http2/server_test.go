@@ -10,11 +10,11 @@ import (
 	"testing"
 	"testing/synctest"
 
+	"server-template/config"
+
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"server-template/config"
 )
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }

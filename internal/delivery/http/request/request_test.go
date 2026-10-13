@@ -7,14 +7,14 @@ import (
 	"testing"
 	"uuid"
 
-	"github.com/labstack/echo/v5"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"server-template/internal/delivery/http/request"
 	"server-template/internal/delivery/http/response"
 	"server-template/internal/delivery/http/validator"
 	"server-template/internal/pkg/apperr"
+
+	"github.com/labstack/echo/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type address struct {

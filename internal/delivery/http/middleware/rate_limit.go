@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"server-template/internal/pkg/apperr"
+
 	"github.com/labstack/echo/v5"
 	echomiddleware "github.com/labstack/echo/v5/middleware"
-
-	"server-template/internal/pkg/apperr"
 )
 
 // RateLimitOptions configures NewRateLimiter. A non-positive Rate disables it.

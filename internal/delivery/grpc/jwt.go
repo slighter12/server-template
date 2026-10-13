@@ -45,12 +45,10 @@ func blacklistKey(token string) string { return "blacklist:" + token }
 func (m *tokenManager) issue(ctx context.Context, userID, email string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
-		UserID: userID,
-		Email:  email,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(m.ttl)),
-			IssuedAt:  jwt.NewNumericDate(now),
-		},
+		UserID:    userID,
+		Email:     email,
+		ExpiresAt: jwt.NewNumericDate(now.Add(m.ttl)),
+		IssuedAt:  jwt.NewNumericDate(now),
 	}
 
 	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)

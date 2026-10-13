@@ -12,15 +12,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v5"
-	"github.com/quic-go/quic-go"
-	quichttp3 "github.com/quic-go/quic-go/http3"
-	"go.uber.org/fx"
-
 	"server-template/config"
 	"server-template/internal/delivery/http/common"
 	"server-template/internal/domain/delivery"
 	"server-template/internal/domain/lifecycle"
+
+	"github.com/labstack/echo/v5"
+	"github.com/quic-go/quic-go"
+	quichttp3 "github.com/quic-go/quic-go/http3"
+	"go.uber.org/fx"
 )
 
 // Params are the dependencies of New.

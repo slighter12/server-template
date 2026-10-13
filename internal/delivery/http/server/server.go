@@ -11,15 +11,15 @@ import (
 	"strings"
 	"time"
 
-	echootel "github.com/labstack/echo-otel/v5"
-	"github.com/labstack/echo/v5"
-	echomiddleware "github.com/labstack/echo/v5/middleware"
-	"go.uber.org/fx"
-
 	"server-template/config"
 	"server-template/internal/delivery/http/middleware"
 	"server-template/internal/delivery/http/response"
 	"server-template/internal/delivery/http/validator"
+
+	echootel "github.com/labstack/echo-otel/v5"
+	"github.com/labstack/echo/v5"
+	echomiddleware "github.com/labstack/echo/v5/middleware"
+	"go.uber.org/fx"
 )
 
 // RoutesGroup is the fx value group routers provide themselves into.

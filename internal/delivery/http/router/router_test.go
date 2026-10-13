@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v5"
-
 	"server-template/internal/delivery/http/middleware"
 	"server-template/internal/delivery/http/router"
 	"server-template/internal/delivery/http/validator"
 	"server-template/internal/domain/entity"
 	"server-template/internal/pkg/apperr"
 	"server-template/proto/pb/authpb"
+
+	"github.com/labstack/echo/v5"
 )
 
 type fakeAuth struct {
@@ -135,7 +135,11 @@ func TestLogin(t *testing.T) {
 
 func TestLogout(t *testing.T) {
 	var got string
-	uc := fakeAuth{logout: func(token string) error { got = token; return nil }}
+	uc := fakeAuth{logout: func(token string) error {
+		got = token
+
+		return nil
+	}}
 
 	rec, _ := do(t, uc, http.MethodPost, "/auth/logout", "", "")
 	if rec.Code != http.StatusUnauthorized {

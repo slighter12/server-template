@@ -10,12 +10,12 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/labstack/echo/v5"
-	"go.uber.org/fx"
-
 	"server-template/config"
 	"server-template/internal/domain/delivery"
 	"server-template/internal/domain/lifecycle"
+
+	"github.com/labstack/echo/v5"
+	"go.uber.org/fx"
 )
 
 // Params are the dependencies of New.

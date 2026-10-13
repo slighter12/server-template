@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"server-template/internal/pkg/observability"
+
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"server-template/internal/pkg/observability"
 )
 
 func TestRequestID(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/labstack/echo/v5"
-
 	"server-template/internal/pkg/observability"
+
+	"github.com/labstack/echo/v5"
 )
 
 // CaptureRequestBody keeps a copy of JSON request bodies in RequestInfo so the

@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"testing"
 
+	"server-template/internal/pkg/apperr"
+
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
-
-	"server-template/internal/pkg/apperr"
 )
 
 func lastLog(t *testing.T, raw string) map[string]any {

@@ -6,7 +6,6 @@ import (
 	"server-template/config"
 
 	"cloud.google.com/go/profiler"
-	"github.com/pkg/errors"
 	"go.uber.org/fx"
 	"google.golang.org/api/option"
 )
@@ -59,7 +58,7 @@ func New(params Params) error {
 
 	// 初始化 profiler
 	if err := profiler.Start(profilerConfig, clientOptions...); err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 
 	params.Logger.Info("Cloud Profiler started successfully",

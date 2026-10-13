@@ -9,10 +9,10 @@ package response
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v5"
-
 	"server-template/internal/pkg/apperr"
 	"server-template/internal/pkg/observability"
+
+	"github.com/labstack/echo/v5"
 )
 
 // Meta is request metadata attached to every envelope.

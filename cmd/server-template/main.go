@@ -173,7 +173,7 @@ type startServerParams struct {
 
 // startServer runs every delivery in its own goroutine once the app has
 // started. A Serve failure shuts the whole app down (exit code 1) so OnStop
-// hooks still run. The context passed to Serve is cancelled on OnStop.
+// hooks still run. The context passed to Serve is canceled on OnStop.
 func startServer(p startServerParams) {
 	var (
 		wg     sync.WaitGroup

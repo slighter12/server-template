@@ -8,17 +8,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v5"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-
 	"server-template/config"
 	"server-template/internal/delivery/http/response"
 	"server-template/internal/delivery/http/server"
 	"server-template/internal/pkg/apperr"
 	"server-template/internal/pkg/observability"
+
+	"github.com/labstack/echo/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type testRoutes struct{}

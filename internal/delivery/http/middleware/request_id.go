@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"uuid"
 
-	"github.com/labstack/echo/v5"
-
 	"server-template/internal/pkg/observability"
+
+	"github.com/labstack/echo/v5"
 )
 
 const maxRequestIDLen = 128

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"uuid"
 
+	"server-template/internal/pkg/apperr"
+
 	validatorpkg "github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
-
-	"server-template/internal/pkg/apperr"
 )
 
 // Bind binds the request (path, query, body) into a new T and validates it.

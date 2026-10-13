@@ -53,7 +53,7 @@ func New(params Params) (*Clients, error) {
 		return rpcClients, nil
 	}
 
-	// Sorted iteration keeps startup and error behaviour deterministic.
+	// Sorted iteration keeps startup and error behavior deterministic.
 	for _, clientName := range slices.Sorted(maps.Keys(params.Config.RPC.Clients)) {
 		clientConn, err := grpc.NewClient(params.Config.RPC.Clients[clientName].Target, opts...)
 		if err != nil {

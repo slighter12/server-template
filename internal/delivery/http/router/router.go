@@ -4,12 +4,12 @@
 package router
 
 import (
-	"github.com/labstack/echo/v5"
-	"go.uber.org/fx"
-
 	"server-template/internal/delivery/http/middleware"
 	"server-template/internal/delivery/http/router/handler"
 	"server-template/internal/domain/usecase"
+
+	"github.com/labstack/echo/v5"
+	"go.uber.org/fx"
 )
 
 // Params are the router dependencies.

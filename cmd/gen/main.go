@@ -3,10 +3,10 @@ package main
 import (
 	"log"
 
-	"server-template/internal/domain/entity"
-
 	"github.com/slighter12/gem"
 	"gorm.io/gen"
+
+	"server-template/internal/domain/entity"
 )
 
 func main() {

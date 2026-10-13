@@ -5,13 +5,13 @@ import (
 	"log/slog"
 	"testing"
 
+	"server-template/config"
+
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
-
-	"server-template/config"
 )
 
 func TestDisabledIsNoop(t *testing.T) {

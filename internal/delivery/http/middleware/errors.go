@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/labstack/echo/v5"
-
 	"server-template/internal/delivery/http/response"
 	"server-template/internal/pkg/apperr"
 	"server-template/internal/pkg/observability"
+
+	"github.com/labstack/echo/v5"
 )
 
 // HTTP-level failures that have no dedicated apperr sentinel. Their Kind only

@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v5"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"server-template/internal/delivery/http/response"
 	"server-template/internal/pkg/apperr"
 	"server-template/internal/pkg/observability"
+
+	"github.com/labstack/echo/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // newTestEcho builds the production-shaped chain around the given routes.

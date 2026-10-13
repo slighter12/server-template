@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"server-template/internal/pkg/observability"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestContextValues(t *testing.T) {

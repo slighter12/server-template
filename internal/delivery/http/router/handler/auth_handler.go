@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v5"
-
 	"server-template/internal/delivery/http/middleware"
 	"server-template/internal/delivery/http/request"
 	"server-template/internal/delivery/http/response"
 	"server-template/internal/domain/entity"
 	"server-template/internal/domain/usecase"
 	"server-template/internal/pkg/apperr"
+
+	"github.com/labstack/echo/v5"
 )
 
 // AuthHandler serves the auth endpoints. Handlers only return errors; the

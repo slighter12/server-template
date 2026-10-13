@@ -6,15 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"server-template/internal/domain/entity"
+	"server-template/internal/domain/repository"
+	"server-template/internal/pkg/apperr"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-
-	"server-template/internal/domain/entity"
-	"server-template/internal/domain/repository"
-	"server-template/internal/pkg/apperr"
 )
 
 type stubUserRepo struct {

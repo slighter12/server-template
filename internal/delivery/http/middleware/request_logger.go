@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v5"
-	"go.opentelemetry.io/otel/trace"
-
 	"server-template/internal/delivery/http/response"
 	"server-template/internal/pkg/apperr"
 	"server-template/internal/pkg/observability"
+
+	"github.com/labstack/echo/v5"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RequestLoggerOptions configures RequestLogger.

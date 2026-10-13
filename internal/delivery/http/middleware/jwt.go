@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v5"
-
 	"server-template/internal/domain/usecase"
 	"server-template/internal/pkg/apperr"
+
+	"github.com/labstack/echo/v5"
 )
 
 const tokenValidationTimeout = 5 * time.Second
