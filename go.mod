@@ -12,7 +12,7 @@ require (
 	github.com/labstack/echo-otel/v5 v5.0.0
 	github.com/labstack/echo/v5 v5.4.0
 	github.com/pressly/goose/v3 v3.29.0
-	github.com/quic-go/quic-go v0.63.0
+	github.com/quic-go/quic-go v0.64.1
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/slighter12/gem v0.0.0-20250328094759-833c3290c2d5
 	github.com/slighter12/go-lib/database/mongo v1.2.0
