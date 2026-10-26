@@ -99,7 +99,7 @@ services:
         condition: service_healthy
 
   tempo:
-    image: grafana/tempo:3.1.0  # tempo only publishes full version tags
+    image: grafana/tempo:3.1.1  # tempo only publishes full version tags
     profiles: ["observability"]
     command: ["-config.file=/etc/tempo.yaml"]
     ports:
